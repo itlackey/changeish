@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
-# Version: 0.1.2
+# Version: 0.1.3
 # Usage: ./changes.sh [OPTIONS]
 #
 # Options:
-#   --from REV           Set the starting commit (default: HEAD)
-#   --to REV             Set the ending commit (default: HEAD^)
-#   --short-diff         Show only diffs for todos-related markdown files
-#   --model MODEL        Specify the Ollama model to use (default: devstral)
+#   --from REV             Set the starting commit (default: HEAD)
+#   --to REV               Set the ending commit (default: HEAD^)
+#   --short-diff           Show only diffs for todos-related markdown files
+#   --model MODEL          Specify the Ollama model to use (default: devstral)
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
-#   --prompt-template PATH  Path to prompt template file (default: ./changelog_prompt.md)
-#   --prompt-only        Generate prompt file only, do not generate or insert changelog
-#   --all                Include all history (from first commit to HEAD)
-#   --help               Show this help message and exit
+#   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
+#   --prompt-only          Generate prompt file only, do not generate or insert changelog
+#   --version-file PATH    File to check for version number changes in each commit (default: auto-detects common files)
+#   --all                  Include all history (from first commit to HEAD)
+#   --help                 Show this help message and exit
+#   --version              Show script version and exit
 #
 # Example:
-#   ./changes.sh --from v1.0.0 --to HEAD --model llama3
+#   ./changes.sh --from v1.0.0 --model llama3 --version-file pyproject.toml
 set -euo pipefail
 
 # Print help and exit
@@ -28,6 +30,9 @@ show_version() {
   awk 'NR==2{gsub(/^# /, ""); print; exit}' "$0"
   exit 0
 }
+
+version_file=""
+default_version_files=("package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
 # Write git history to markdown file
 write_git_history() {
@@ -61,7 +66,28 @@ write_git_history() {
       printf '%s\n' "$message"
       echo '```'
       echo
-      echo "**Changes in package.json:**"
+      # Version number changes section
+      local found_version_file=""
+      if [[ -n "$version_file" ]]; then
+        if [[ -f "$version_file" ]]; then
+          found_version_file="$version_file"
+        fi
+      else
+        for vf in "${default_version_files[@]}"; do
+          if [[ -f "$vf" ]]; then
+            found_version_file="$vf"
+            break
+          fi
+        done
+      fi
+      if [[ -n "$found_version_file" ]]; then
+        echo "**Version number changes in $found_version_file:**"
+        echo '```diff'
+        git diff "$commit^!" -- "$found_version_file" || true
+        echo '```'
+        echo
+      fi
+      echo "**Version number changes:**"
       echo '```diff'
       git diff "$commit^!" -- package.json || true
       echo '```'
@@ -165,6 +191,7 @@ while [[ $# -gt 0 ]]; do
     --changelog-file) changelog_file="$2"; shift 2 ;;
     --prompt-template) prompt_template="$2"; shift 2 ;;
     --prompt-only) prompt_only=true; shift ;;
+    --version-file) version_file="$2"; shift 2 ;;
     --all) all_history=true; shift ;;
     --help) show_help ;;
     --version) show_version ;;

@@ -1,7 +1,7 @@
 # TODOs
 
-ENHANCEMENT: Provide default version file for python and node
-ENHANCEMENT: Provide a version file arg to override the defaults
+ADDED: Provide default version file for python and node
+ADDED: Provide a version file arg to override the defaults
 DONE: Refactor code to use functions
 ENHANCEMENT: Add update function and argument to update script to latest version
 CHORE: Add install instructions to README
