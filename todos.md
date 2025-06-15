@@ -1,0 +1,12 @@
+# TODOs
+
+ENHANCEMENT: Provide default version file for python and node
+ENHANCEMENT: Provide a version file arg to override the defaults
+CHORE: Refactor code to use functions
+ENHANCEMENT: Add update function and argument to update script to latest version
+CHORE: Add install instructions to README
+ENHANCEMENT: Switch from --generate to --prompt-only to allow the script to generate the changelog by default
+CHORE: Cleanup default output file names (ie. prompt.md, history.md)
+ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
+ENHANCEMENT: add an --exclude-pattern arg
+CHORE: Add "Managed by changeish" to change output

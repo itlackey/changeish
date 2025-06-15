@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Version: 0.1
 # Usage: ./changes.sh [OPTIONS]
 #
 # Options:
@@ -18,7 +19,13 @@ set -euo pipefail
 
 # Print help and exit
 show_help() {
-  awk 'NR>1 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
+  awk 'NR>2 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
+  exit 0
+}
+
+# Print version and exit
+show_version() {
+  awk 'NR==2{gsub(/^# /, ""); print; exit}' "$0"
   exit 0
 }
 
@@ -44,6 +51,7 @@ while [[ $# -gt 0 ]]; do
     --generate) generate=true; shift ;;
     --all) all_history=true; shift ;;
     --help) show_help ;;
+    --version) show_version ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
