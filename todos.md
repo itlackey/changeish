@@ -9,5 +9,5 @@ ENHANCEMENT: Switch from --generate to --prompt-only to allow the script to gene
 CHORE: Cleanup default output file names (ie. prompt.md, history.md)
 ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
 ENHANCEMENT: add an --exclude-pattern arg
-CHORE: Add "Managed by changeish" to change output
+DONE: Add "Managed by changeish" to change output
 FIXED: Script does not append to end of changelog if no existing sections are found
