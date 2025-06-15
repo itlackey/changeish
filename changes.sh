@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
-# Usage: ./git_history.sh [--to REV] [--from REV] [--full-diff] [--model MODEL] [--changelog-file PATH]
+# Usage: ./changes.sh [OPTIONS]
+#
+# Options:
+#   --from REV           Set the starting commit (default: HEAD)
+#   --to REV             Set the ending commit (default: HEAD^)
+#   --short-diff         Show only diffs for todos-related markdown files
+#   --model MODEL        Specify the Ollama model to use (default: devstral)
+#   --changelog-file PATH  Path to changelog file to update (default: ./static/help/changelog.md)
+#   --prompt-file PATH   Path to prompt file (default: ./docs/prompts/changelog_prompt.md)
+#   --generate           Generate changelog using Ollama
+#   --all                Include all history (from first commit to HEAD)
+#   --help               Show this help message and exit
+#
+# Example:
+#   ./changes.sh --from v1.0.0 --to HEAD --generate --model llama3
 set -euo pipefail
+
+# Print help and exit
+show_help() {
+  awk 'NR>1 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
+  exit 0
+}
 
 # Defaults
 from_rev="HEAD"
@@ -23,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --prompt-file) prompt_file="$2"; shift 2 ;;
     --generate) generate=true; shift ;;
     --all) all_history=true; shift ;;
+    --help) show_help ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
