@@ -33,10 +33,10 @@ show_version() {
 from_rev="HEAD"
 to_rev="HEAD^"
 short_diff=false
-prompt_file="./docs/prompts/changelog_prompt.md"
+prompt_file="./changelog_prompt.md"
 generate=false
 model="devstral"
-changelog_file="./static/help/changelog.md"
+changelog_file="./CHANGELOG.md"
 all_history=false
 
 # Parse args
@@ -156,14 +156,19 @@ if $generate; then
     echo "$changelog"
     echo '```'
 
-    # Only write to changelog_file if --changelog-file was specified
-    if [[ -n "$changelog_file" ]]; then
+    # Only write to changelog_file if change log is found
+    if [[ -f "$changelog_file" ]]; then
       tmp="$(mktemp)"
-      awk -v new="$changelog\n" '
-        NR==1 {print; print ""; print new; next}
-        /^## / {print; f=1; next}
-        {if(f) print; else next}
-      ' "$changelog_file" > "$tmp" && mv "$tmp" "$changelog_file"
+      if grep -q '^## ' "$changelog_file"; then
+        awk -v new="$changelog\n" '
+          NR==1 {print; print ""; print new; next}
+          /^## / {print; f=1; next}
+          {if(f) print; else next}
+        ' "$changelog_file" > "$tmp" && mv "$tmp" "$changelog_file"
+      else
+        # No second-level heading found, append to end
+        printf '\n' "$changelog" >> "$changelog_file"
+      fi
       echo "Inserted fresh changelog into '$changelog_file'."
     fi
   else
