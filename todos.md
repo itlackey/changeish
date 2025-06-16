@@ -11,3 +11,4 @@ ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to 
 ENHANCEMENT: add an --exclude-pattern arg
 DONE: Add "Managed by changeish" to change output
 FIXED: Script does not append to end of changelog if no existing sections are found
+ENHANCEMENT: Add arg to only look at pending changes instead of previous commits
