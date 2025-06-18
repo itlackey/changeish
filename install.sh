@@ -5,7 +5,7 @@ SCRIPT_NAME="changes.sh"
 PROMPT_NAME="changelog_prompt.md"
 INSTALL_DIR=""
 VERSION="v0.1.8"
-
+rm $(which changeish )2>/dev/null || true
 # Parse args
 while [ $# -gt 0 ]; do
   case "$1" in
