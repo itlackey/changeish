@@ -22,3 +22,4 @@
 - CHORE: move default prompt template into sh file.
 - ENHANCEMENT: add option to create a prompt template based on the default
 - ENHANCEMENT: use temp files for history and prompt. save them based on args
+- ADDED: Help now shows the default version files the script will look for.

@@ -43,7 +43,7 @@ changeish [OPTIONS]
 - `--model MODEL`           Specify the Ollama model to use (default: devstral)
 - `--changelog-file PATH`   Path to changelog file to update (default: ./CHANGELOG.md)
 - `--prompt-template PATH`  Path to prompt template file (default: ./changelog_prompt.md)
-- `--prompt-only`           Generate prompt file only, do not generate or insert changelog
+- `--prompt-only`           Generate prompt file only, do not generate or update changelog
 - `--version-file PATH`     File to check for version number changes in each commit (default: auto-detects common files)
 - `--help`                  Show usage information and exit
 - `--version`               Show script version and exit

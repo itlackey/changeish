@@ -4,7 +4,7 @@ REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_NAME="changelog_prompt.md"
 INSTALL_DIR=""
-VERSION="v0.1.8"
+VERSION="v0.1.9"
 
 # Delete existing changeish script if it exists
 if [ -n "$(which changeish)" ]; then

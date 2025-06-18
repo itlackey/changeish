@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 0.1.8
+# Version: 0.1.9
 # Usage: changeish [OPTIONS]
 #
 # Options:
@@ -26,6 +26,10 @@
 #   changeish --update
 set -euo pipefail
 
+
+version_file=""
+default_version_files=("install.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
+
 update() {
   echo "Updating changeish..."
   curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
@@ -35,6 +39,10 @@ update() {
 # Print help and exit
 show_help() {
   awk 'NR>2 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
+  echo "Default version files:"
+  for file in "${default_version_files[@]}"; do
+    echo "  $file"
+  done
   exit 0
 }
 
@@ -43,9 +51,6 @@ show_version() {
   awk 'NR==2{gsub(/^# /, ""); print; exit}' "$0"
   exit 0
 }
-
-version_file=""
-default_version_files=("install.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
 # Write git history to markdown file
 write_git_history() {
