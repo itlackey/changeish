@@ -13,3 +13,5 @@ DONE: Add "Managed by changeish" to change output
 FIXED: Script does not append to end of changelog if no existing sections are found
 ADDED: Add arg to only look at pending changes instead of previous commits
 FIXED: Parsing issue with --to and --from args
+FIXED: install.sh issue with getting latest version
+FIXED: bug with defaulting to --current if no other options are passed

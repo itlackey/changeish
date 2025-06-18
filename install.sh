@@ -3,15 +3,8 @@ set -e
 REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_NAME="changelog_prompt.md"
-get_latest_release() {
-  curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | \
-    grep '"tag_name"' | \
-    sed -E 's/.*"([^"]+)".*/\1/'
-}
-
-
 INSTALL_DIR=""
-VERSION=$(get_latest_release)
+VERSION="v0.1.7"
 
 # Parse args
 while [[ $# -gt 0 ]]; do
