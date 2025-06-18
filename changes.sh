@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Version: 0.1.4
-# Usage: ./changes.sh [OPTIONS]
+# Version: 0.1.5
+# Usage: changeish [OPTIONS]
 #
 # Options:
 #   --from REV             Set the starting commit (default: HEAD)
 #   --to REV               Set the ending commit (default: HEAD^)
 #   --short-diff           Show only diffs for todos-related markdown files
-#   --model MODEL          Specify the Ollama model to use (default: devstral)
+#   --model MODEL          Specify the model to use (default: qwen2.5-coder)
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
 #   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
 #   --prompt-only          Generate prompt file only, do not generate or insert changelog
@@ -14,15 +14,23 @@
 #   --current              Use only uncommitted changes for git history
 #   --staged               Use only staged changes for git history
 #   --all                  Include all history (from first commit to HEAD)
+#   --update               Update the script to the latest version and exit
 #   --help                 Show this help message and exit
 #   --version              Show script version and exit
 #
 # Example:
-#   ./changes.sh --current
-#   ./changes.sh --staged
-#   ./changes.sh --from v1.0.0 --model llama3 --version-file pyproject.toml
+#   changeish --current
+#   changeish --staged
+#   changeish --from v1.0.0 --model llama3 --version-file pyproject.toml
+#   changeish --update
 set -euo pipefail
 
+update() {
+  echo "Updating changeish..."
+  curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
+  echo "Update complete. Please re-run the script."
+  exit 0
+}
 # Print help and exit
 show_help() {
   awk 'NR>2 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
@@ -175,7 +183,7 @@ to_rev="HEAD^"
 short_diff=false
 prompt_template="./changelog_prompt.md"
 prompt_only=false
-model="devstral"
+model="qwen2.5-coder"
 changelog_file="./CHANGELOG.md"
 all_history=false
 current_changes=false
@@ -196,6 +204,7 @@ while [[ $# -gt 0 ]]; do
     --current) current_changes=true; shift ;;
     --staged) staged_changes=true; shift ;;
     --all) all_history=true; shift ;;
+    --update) update ;;
     --help) show_help ;;
     --version) show_version ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
