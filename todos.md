@@ -18,7 +18,7 @@
 - FIXED: POSIX sh compatibility bug in install.sh
 - ENHANCEMENT: support remote API for generation
   ```bash
-  curl -X POST "https://i2db-chat-sandboxaizehuif2whye3c.openai.azure.com/openai/deployments/gpt-4.1-nano/chat/completions?api-version=2025-01-01-preview" \
+  curl -X POST "https://<workspace>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=<version>" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $AZURE_API_KEY" \
       -d '{
@@ -41,7 +41,7 @@
           "top_p": 1,
           "frequency_penalty": 0,
           "presence_penalty": 0,
-          "model": "gpt-4.1-nano"
+          "model": "<model>"
       }'
   ```
 - CHORE: write doc on using external APIs
