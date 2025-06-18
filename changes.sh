@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Version: 0.1.3
+# Version: 0.1.4
 # Usage: ./changes.sh [OPTIONS]
 #
 # Options:
@@ -11,11 +11,15 @@
 #   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
 #   --prompt-only          Generate prompt file only, do not generate or insert changelog
 #   --version-file PATH    File to check for version number changes in each commit (default: auto-detects common files)
+#   --current              Use only uncommitted changes for git history
+#   --staged               Use only staged changes for git history
 #   --all                  Include all history (from first commit to HEAD)
 #   --help                 Show this help message and exit
 #   --version              Show script version and exit
 #
 # Example:
+#   ./changes.sh --current
+#   ./changes.sh --staged
 #   ./changes.sh --from v1.0.0 --model llama3 --version-file pyproject.toml
 set -euo pipefail
 
@@ -83,15 +87,10 @@ write_git_history() {
       if [[ -n "$found_version_file" ]]; then
         echo "**Version number changes in $found_version_file:**"
         echo '```diff'
-        git diff "$commit^!" -- "$found_version_file" || true
+        git diff "$commit^!" -- "$found_version_file" | grep -i version || true
         echo '```'
         echo
       fi
-      echo "**Version number changes:**"
-      echo '```diff'
-      git diff "$commit^!" -- package.json || true
-      echo '```'
-      echo
       if $short_diff; then
         echo "**Diffs for todos-related markdown files:**"
         echo '```diff'
@@ -179,6 +178,8 @@ prompt_only=false
 model="devstral"
 changelog_file="./CHANGELOG.md"
 all_history=false
+current_changes=false
+staged_changes=false
 outfile="git_history.md"
 
 # Parse args
@@ -192,6 +193,8 @@ while [[ $# -gt 0 ]]; do
     --prompt-template) prompt_template="$2"; shift 2 ;;
     --prompt-only) prompt_only=true; shift ;;
     --version-file) version_file="$2"; shift 2 ;;
+    --current) current_changes=true; shift ;;
+    --staged) staged_changes=true; shift ;;
     --all) all_history=true; shift ;;
     --help) show_help ;;
     --version) show_version ;;
@@ -203,6 +206,45 @@ done
 if $all_history; then
   to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
   from_rev="HEAD"
+elif $current_changes; then
+  outfile="git_history.md"
+  {
+    echo "# Git History (Uncommitted Changes)"
+    echo
+    echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
+    echo
+    echo "**Uncommitted changes as of:** $(date)"
+    echo
+    echo "**Version File:** ${version_file:-auto-detected}"
+    echo '```diff'
+    git diff "$version_file" | grep -i version || true
+    echo '```'
+    echo
+    echo "**Diff:**"
+    echo '```diff'
+    git diff
+    echo '```'
+  } > "$outfile"
+  echo "Generated git history for uncommitted changes in $outfile."
+elif $staged_changes; then
+  outfile="git_history.md"
+  {
+    echo "# Git History (Staged Changes)"
+    echo
+    echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
+    echo
+    echo "**Staged changes as of:** $(date)"    
+    echo
+    echo "**Version File:** ${version_file:-auto-detected}"
+    echo '```diff'
+    git diff --cached "$version_file" | grep -i version || true
+    echo '```'
+    echo "**Diff:**"
+    echo '```diff'
+    git diff --cached
+    echo '```'
+  } > "$outfile"
+  echo "Generated git history for staged changes in $outfile."
 else
   # If --to not specified, use previous commit
   if [[ "$to_rev" == "$(git rev-list --max-parents=0 HEAD | tail -n1)" ]]; then
@@ -213,25 +255,22 @@ else
   # If --from not specified, use current commit
   if [[ "$from_rev" == "HEAD" ]]; then
     if ! [[ "$*" =~ --from ]]; then
-      from_rev="HEAD"
+      from_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
     fi
   fi
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  commits=( $(git rev-list --reverse "$to_rev".."$from_rev") )
+  if [[ ${#commits[@]} -eq 0 ]]; then
+    echo "No commits found in range $to_rev..$from_rev" >&2
+    exit 1
+  fi
+  start="${commits[0]}"
+  end="${commits[-1]}"
+  start_date="$(git show -s --format=%ci "$start")"
+  end_date="$(git show -s --format=%ci "$end")"
+  write_git_history "$outfile" "$branch" "$start" "$end" "$start_date" "$end_date" "${commits[@]}"
+  echo "Generated git history in $outfile."
 fi
-
-branch="$(git rev-parse --abbrev-ref HEAD)"
-commits=( $(git rev-list --reverse "$to_rev".."$from_rev") )
-if [[ ${#commits[@]} -eq 0 ]]; then
-  echo "No commits found in range $to_rev..$from_rev" >&2
-  exit 1
-fi
-
-start="${commits[0]}"
-end="${commits[-1]}"
-start_date="$(git show -s --format=%ci "$start")"
-end_date="$(git show -s --format=%ci "$end")"
-
-write_git_history "$outfile" "$branch" "$start" "$end" "$start_date" "$end_date" "${commits[@]}"
-echo "Generated git history in $outfile."
 
 
 # Replace prompt generation and writing with function call
