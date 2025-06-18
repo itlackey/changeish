@@ -50,6 +50,12 @@ changeish [OPTIONS]
 
 ### Example
 
+Generate a changelog for all uncommitted changes:
+
+```bash
+changeish
+```
+
 Generate a changelog for all commits from `v1.0.0` to `HEAD` and use the `llama3` model for AI summarization:
 
 ```sh
@@ -90,4 +96,6 @@ changeish --from v1.0.0 --to HEAD --prompt-only
 
 ## License
 
-MIT
+CC-BY
+
+> If you use this with you project, tell your friends about it.
