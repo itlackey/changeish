@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh 
 To install a specific version:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh -s -- --version v0.1.3
+curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh -s -- --version v0.1.8
 ```
 
 ## Usage
