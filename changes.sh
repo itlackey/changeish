@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Version: 0.1.5
+# Version: 0.1.6
 # Usage: changeish [OPTIONS]
 #
 # Options:
+#   --current              Use only uncommitted changes for git history (default)
+#   --staged               Use only staged changes for git history
+#   --all                  Include all history (from first commit to HEAD)
 #   --from REV             Set the starting commit (default: HEAD)
 #   --to REV               Set the ending commit (default: HEAD^)
 #   --short-diff           Show only diffs for todos-related markdown files
@@ -11,24 +14,22 @@
 #   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
 #   --prompt-only          Generate prompt file only, do not generate or insert changelog
 #   --version-file PATH    File to check for version number changes in each commit (default: auto-detects common files)
-#   --current              Use only uncommitted changes for git history
-#   --staged               Use only staged changes for git history
-#   --all                  Include all history (from first commit to HEAD)
 #   --update               Update the script to the latest version and exit
 #   --help                 Show this help message and exit
 #   --version              Show script version and exit
 #
 # Example:
-#   changeish --current
+#   changeish
 #   changeish --staged
-#   changeish --from v1.0.0 --model llama3 --version-file pyproject.toml
+#   changeish --from v1.0.0 --model llama3 --version-file custom_version.txt
+#   changeish --all --changelog-file CHANGELOG.md
 #   changeish --update
 set -euo pipefail
 
 update() {
   echo "Updating changeish..."
   curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
-  echo "Update complete. Please re-run the script."
+  echo "Update complete."
   exit 0
 }
 # Print help and exit
@@ -79,19 +80,6 @@ write_git_history() {
       echo '```'
       echo
       # Version number changes section
-      local found_version_file=""
-      if [[ -n "$version_file" ]]; then
-        if [[ -f "$version_file" ]]; then
-          found_version_file="$version_file"
-        fi
-      else
-        for vf in "${default_version_files[@]}"; do
-          if [[ -f "$vf" ]]; then
-            found_version_file="$vf"
-            break
-          fi
-        done
-      fi
       if [[ -n "$found_version_file" ]]; then
         echo "**Version number changes in $found_version_file:**"
         echo '```diff'
@@ -190,6 +178,11 @@ current_changes=false
 staged_changes=false
 outfile="git_history.md"
 
+# If no arguments are passed, default to --current
+if [[ $# -eq 0 ]]; then
+  current_changes=true
+fi
+
 # Parse args
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -211,11 +204,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Handle --all and default commit ranges
-if $all_history; then
-  to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
-  from_rev="HEAD"
-elif $current_changes; then
+found_version_file=""
+if [[ -n "$version_file" ]]; then
+  if [[ -f "$version_file" ]]; then
+    found_version_file="$version_file"
+  fi
+else
+  for vf in "${default_version_files[@]}"; do
+    if [[ -f "$vf" ]]; then
+      found_version_file="$vf"
+      break
+    fi
+  done
+fi
+
+if $current_changes; then
   outfile="git_history.md"
   {
     echo "# Git History (Uncommitted Changes)"
@@ -224,14 +227,22 @@ elif $current_changes; then
     echo
     echo "**Uncommitted changes as of:** $(date)"
     echo
-    echo "**Version File:** ${version_file:-auto-detected}"
-    echo '```diff'
-    git diff "$version_file" | grep -i version || true
-    echo '```'
+     if [[ -n "$found_version_file" ]]; then
+      echo "**Version number changes in $found_version_file:**"
+      echo '```diff'
+      git diff "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++'
+      echo '```'
+      echo
+    fi
     echo
     echo "**Diff:**"
     echo '```diff'
-    git diff
+    git diff -- . ':(exclude)*todo*.md'
+    echo '```'
+    echo
+    echo "**Diffs for todos-related markdown files:**"
+    echo '```diff'
+    git diff -- '*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++'
     echo '```'
   } > "$outfile"
   echo "Generated git history for uncommitted changes in $outfile."
@@ -244,43 +255,49 @@ elif $staged_changes; then
     echo
     echo "**Staged changes as of:** $(date)"    
     echo
-    echo "**Version File:** ${version_file:-auto-detected}"
-    echo '```diff'
-    git diff --cached "$version_file" | grep -i version || true
-    echo '```'
+    if [[ -n "$found_version_file" ]]; then
+      echo "**Version number changes in $found_version_file:**"
+      echo '```diff'
+      git diff --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++'
+      echo '```'
+      echo
+    fi
+    echo
     echo "**Diff:**"
     echo '```diff'
-    git diff --cached
+    git diff --cached -- . ':(exclude)*todo*.md'
+    echo '```'
+    echo
+    echo "**Diffs for todos-related markdown files:**"
+    echo '```diff'
+    git diff --cached -- '*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++'
     echo '```'
   } > "$outfile"
   echo "Generated git history for staged changes in $outfile."
 else
-  # If --to not specified, use previous commit
-  if [[ "$to_rev" == "$(git rev-list --max-parents=0 HEAD | tail -n1)" ]]; then
-    if ! [[ "$*" =~ --to ]]; then
-      to_rev="HEAD^"
-    fi
+  
+  # Handle --all and default commit ranges
+  if $all_history; then
+    to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+    from_rev="HEAD"
   fi
-  # If --from not specified, use current commit
-  if [[ "$from_rev" == "HEAD" ]]; then
-    if ! [[ "$*" =~ --from ]]; then
-      from_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
-    fi
-  fi
+
+  echo "Using commit range: $to_rev^..$from_rev"
   branch="$(git rev-parse --abbrev-ref HEAD)"
-  commits=( $(git rev-list --reverse "$to_rev".."$from_rev") )
+  commits=( $(git rev-list --reverse "$to_rev^".."$from_rev") )
   if [[ ${#commits[@]} -eq 0 ]]; then
-    echo "No commits found in range $to_rev..$from_rev" >&2
+    echo "No commits found in range $to_rev^..$from_rev" >&2
     exit 1
   fi
   start="${commits[0]}"
   end="${commits[-1]}"
   start_date="$(git show -s --format=%ci "$start")"
   end_date="$(git show -s --format=%ci "$end")"
+  total_commits=${#commits[@]}
+  echo "Generating git history for total $total_commits commits from $start ($start_date) to $end ($end_date) on branch $branch..."
   write_git_history "$outfile" "$branch" "$start" "$end" "$start_date" "$end_date" "${commits[@]}"
   echo "Generated git history in $outfile."
 fi
-
 
 # Replace prompt generation and writing with function call
 generate_prompt "$outfile" "$prompt_template"
