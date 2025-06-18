@@ -1,13 +1,13 @@
-#!/usr/bin/env bash
+#!/usr/bin/env sh
 set -e
 REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_NAME="changelog_prompt.md"
 INSTALL_DIR=""
-VERSION="v0.1.7"
+VERSION="v0.1.8"
 
 # Parse args
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
   case "$1" in
     --version)
       VERSION="$2"
@@ -22,9 +22,9 @@ done
 
 
 # Determine install directory for script
-if [[ -w /usr/local/bin ]]; then
+if [ -w /usr/local/bin ]; then
     INSTALL_DIR="/usr/local/bin"
-elif [[ -d "$HOME/.local/bin" ]]; then
+elif [ -d "$HOME/.local/bin" ]; then
     INSTALL_DIR="$HOME/.local/bin"
 else
     INSTALL_DIR="$HOME/bin"
