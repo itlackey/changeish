@@ -17,6 +17,33 @@
 - FIXED: bug with defaulting to --current if no other options are passed
 - FIXED: POSIX sh compatibility bug in install.sh
 - ENHANCEMENT: support remote API for generation
+  ```bash
+  curl -X POST "https://i2db-chat-sandboxaizehuif2whye3c.openai.azure.com/openai/deployments/gpt-4.1-nano/chat/completions?api-version=2025-01-01-preview" \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer $AZURE_API_KEY" \
+      -d '{
+          "messages": [
+              {
+                  "role": "user",
+                  "content": "I am going to Paris, what should I see?"
+              },
+              {
+                  "role": "assistant",
+                  "content": "Paris, the capital of France, is known for its stunning architecture, art museums, historical landmarks, and romantic atmosphere. Here are some of the top attractions to see in Paris:\n \n 1. The Eiffel Tower: The iconic Eiffel Tower is one of the most recognizable landmarks in the world and offers breathtaking views of the city.\n 2. The Louvre Museum: The Louvre is one of the world's largest and most famous museums, housing an impressive collection of art and artifacts, including the Mona Lisa.\n 3. Notre-Dame Cathedral: This beautiful cathedral is one of the most famous landmarks in Paris and is known for its Gothic architecture and stunning stained glass windows.\n \n These are just a few of the many attractions that Paris has to offer. With so much to see and do, it's no wonder that Paris is one of the most popular tourist destinations in the world."
+              },
+              {
+                  "role": "user",
+                  "content": "What is so great about #1?"
+              }
+          ],
+          "max_completion_tokens": 800,
+          "temperature": 1,
+          "top_p": 1,
+          "frequency_penalty": 0,
+          "presence_penalty": 0,
+          "model": "gpt-4.1-nano"
+      }'
+  ```
 - CHORE: write doc on using external APIs
 - ENHANCEMENT: load .env file to get API settings
 - CHORE: move default prompt template into sh file.
