@@ -85,7 +85,7 @@ changeish --from v1.0.0 --to HEAD --prompt-only
 ## Uninstall
 
 ```bash
- rm $(which changes.sh )
+ rm $(which changeish )
 ```
 
 ## License
