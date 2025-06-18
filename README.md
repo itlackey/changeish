@@ -98,4 +98,4 @@ changeish --from v1.0.0 --to HEAD --prompt-only
 
 CC-BY
 
-> If you use this with you project, tell your friends about it.
+> If you use this with you project, leave a :star: and don't forget to tell your friends!
