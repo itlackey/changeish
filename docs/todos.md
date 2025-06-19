@@ -7,7 +7,7 @@
 - DONE: Add install instructions to README
 - ADDED: Switch from --generate to --prompt-only to allow the script to generate the changelog by - default
 - CHORE: Cleanup default output file names (ie. prompt.md, history.md)
-- ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to allow custom - patterns during diff
+- ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
 - ENHANCEMENT: add an --exclude-pattern arg
 - DONE: Add "Managed by changeish" to change output
 - FIXED: Script does not append to end of changelog if no existing sections are found
@@ -16,7 +16,7 @@
 - FIXED: install.sh issue with getting latest version
 - FIXED: bug with defaulting to --current if no other options are passed
 - FIXED: POSIX sh compatibility bug in install.sh
-- ENHANCEMENT: support remote API for generation
+- ENHANCEMENT: IN PROGRESS support remote API for generation
   ```bash
   curl -X POST "https://<workspace>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=<version>" \
       -H "Content-Type: application/json" \
