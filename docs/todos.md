@@ -16,7 +16,7 @@
 - FIXED: install.sh issue with getting latest version
 - FIXED: bug with defaulting to --current if no other options are passed
 - FIXED: POSIX sh compatibility bug in install.sh
-- ENHANCEMENT: IN PROGRESS support remote API for generation
+- DONE: support remote API for generation
   ```bash
   curl -X POST "https://<workspace>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=<version>" \
       -H "Content-Type: application/json" \
@@ -45,10 +45,12 @@
       }'
   ```
 - CHORE: write doc on using external APIs
-- ENHANCEMENT: load .env file to get API settings
+- ENHANCEMENT: add --config-file load .env file to get settings
 - DONE: move default prompt template into sh file.
 - ENHANCEMENT: add option to create a prompt template based on the default
 - ENHANCEMENT: use temp files for history and prompt. save them based on args
+- CHORE: replace --prompt-only with --save-prompt
+- CHORE: Add --save-history to Optionally save history file
 - ADDED: Help now shows the default version files the script will look for.
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - FIXED: Script should not fail if no todo files are found.
