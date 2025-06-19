@@ -17,21 +17,28 @@
 #   --update               Update the script to the latest version and exit
 #   --help                 Show this help message and exit
 #   --version              Show script version and exit
+#   --available-releases   Show available releases and exit
 #
 # Example:
-#   changeish
+# Update change log with information about the uncommitted changes:
+#   changeish 
+# Update change log with information about the staged changes:
 #   changeish --staged
+# Update change log with information from a specific commit range:
 #   changeish --from v1.0.0 --model llama3 --version-file custom_version.txt
+# Update change log with information about all history:
 #   changeish --all --changelog-file CHANGELOG.md
+# Update changeish to the latest changes:
 #   changeish --update
 set -euo pipefail
 
 
 version_file=""
-default_version_files=("install.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
+default_version_files=("changes.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
 update() {
-  echo "Updating changeish..."
+  latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
+  echo "Updating changeish to version $latest_version..."
   curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
   echo "Update complete."
   exit 0
@@ -43,6 +50,11 @@ show_help() {
   for file in "${default_version_files[@]}"; do
     echo "  $file"
   done
+  exit 0
+}
+
+show_available_releases() {
+  curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[].tag_name'
   exit 0
 }
 
@@ -92,17 +104,16 @@ write_git_history() {
         echo '```'
         echo
       fi
-      if $short_diff; then
-        echo "**Diffs for todos-related markdown files:**"
-        echo '```diff'
-        git diff "$commit^!" -- '*.md' | grep -E 'diff --git a/.*todos.*\.md' -A100 || true
-        echo '```'
-      else
-        echo "**Full diff:**"
-        echo '```diff'
-        git diff "$commit^!" --no-color
-        echo '```'    
-      fi
+      echo "**Diffs for todos-related markdown files:**"
+      echo '```diff'
+      git diff "$commit^!" -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
+      echo '```'
+      
+      echo "**Full diff:**"
+      echo '```diff'
+      git diff "$commit^!" ':(exclude)*todo*.md'
+      echo '```'    
+      
       echo
     done
   } > "$outfile"
@@ -171,18 +182,18 @@ insert_changelog() {
 }
 
 # Defaults
-from_rev="HEAD"
-to_rev="HEAD^"
+from_rev=""
+to_rev=""
 short_diff=false
 prompt_template="./changelog_prompt.md"
 prompt_only=false
 model="qwen2.5-coder"
 changelog_file="./CHANGELOG.md"
 all_history=false
-current_changes=true
+current_changes=false
 staged_changes=false
 outfile="git_history.md"
-
+show_releases=false
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -199,11 +210,25 @@ while [[ $# -gt 0 ]]; do
     --staged) staged_changes=true; shift ;;
     --all) all_history=true; shift ;;
     --update) update ;;
+    --available-releases) show_available_releases ;;
     --help) show_help ;;
     --version) show_version ;;
     *) echo "Unknown arg: $1" >&2; exit 1 ;;
   esac
 done
+
+# After argument parsing, set current_changes if no relevant flags are set
+if ! $staged_changes && ! $all_history && [ -z "$to_rev" ] && [ -z "$from_rev" ]; then
+  current_changes=true
+else
+  current_changes=false
+  if [[ -z "$to_rev" ]]; then
+    to_rev="HEAD"
+  fi
+  if [[ -z "$from_rev" ]]; then
+    from_rev="HEAD"
+  fi
+fi
 
 found_version_file=""
 if [[ -n "$version_file" ]]; then
@@ -219,6 +244,32 @@ else
   done
 fi
 
+
+
+# # print all parsed options
+# echo "Parsed options:"
+# echo "  current_changes: $current_changes"
+# echo "  staged_changes: $staged_changes"
+# echo "  all_history: $all_history"
+# echo "  from_rev: $from_rev"
+# echo "  to_rev: $to_rev"
+# echo "  short_diff: $short_diff"
+# echo "  model: $model"
+# echo "  changelog_file: $changelog_file"
+# echo "  prompt_template: $prompt_template"
+# echo "  prompt_only: $prompt_only"
+# echo "  version_file: $found_version_file"
+# if [[ -z "$found_version_file" ]]; then
+#   echo "No version file found. Skipping version number changes section." >&2
+# fi
+
+
+# Check if git is initialized
+if ! git rev-parse --is-inside-work-tree &>/dev/null; then
+  echo "Error: Not a git repository. Please run this script inside a git repository." >&2
+  exit 1
+fi
+
 if $current_changes; then
   outfile="git_history.md"
   {
@@ -231,7 +282,7 @@ if $current_changes; then
      if [[ -n "$found_version_file" ]]; then
       echo "**Version number changes in $found_version_file:**"
       echo '```diff'
-      git diff "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++'
+      git diff "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
       echo '```'
       echo
     fi
@@ -243,7 +294,7 @@ if $current_changes; then
     echo
     echo "**Diffs for todos-related markdown files:**"
     echo '```diff'
-    git diff -- '*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++'
+    git diff -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
     echo '```'
   } > "$outfile"
   echo "Generated git history for uncommitted changes in $outfile."
@@ -259,7 +310,7 @@ elif $staged_changes; then
     if [[ -n "$found_version_file" ]]; then
       echo "**Version number changes in $found_version_file:**"
       echo '```diff'
-      git diff --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++'
+      git diff --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
       echo '```'
       echo
     fi
@@ -271,7 +322,7 @@ elif $staged_changes; then
     echo
     echo "**Diffs for todos-related markdown files:**"
     echo '```diff'
-    git diff --cached -- '*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++'
+    git diff --cached -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
     echo '```'
   } > "$outfile"
   echo "Generated git history for staged changes in $outfile."

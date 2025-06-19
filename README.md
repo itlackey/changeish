@@ -78,6 +78,7 @@ changeish --from v1.0.0 --to HEAD --prompt-only
 
 - Bash
 - Git
+- jq
 - [Ollama](https://ollama.com/) (optional, for AI changelog generation)
 
 ## How It Works

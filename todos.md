@@ -50,3 +50,9 @@
 - ENHANCEMENT: add option to create a prompt template based on the default
 - ENHANCEMENT: use temp files for history and prompt. save them based on args
 - ADDED: Help now shows the default version files the script will look for.
+- CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
+- FIXED: Script should not fail if no todo files are found.
+- ADDED: Better support for finding and parsing todo files in sub folders.
+- DONE: Added descriptions to help examples
+- ADDED: check to ensure we are in a git repository before running the script.
+- ADDED: Better version management for install & update

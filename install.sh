@@ -4,7 +4,7 @@ REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_NAME="changelog_prompt.md"
 INSTALL_DIR=""
-VERSION="main"
+VERSION=""
 
 # Delete existing changeish script if it exists
 if [ -n "$(which changeish)" ]; then
@@ -35,6 +35,13 @@ else
     INSTALL_DIR="$HOME/bin"
     mkdir -p "$INSTALL_DIR"
 fi
+
+# If version is "", fetch the latest release version
+if [ -z "$VERSION" ]; then
+    VERSION="$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')"
+fi
+
+echo "Installing changeish version $VERSION"
 
 # Build base URL
 BASE_URL="https://raw.githubusercontent.com/$REPO/$VERSION"
