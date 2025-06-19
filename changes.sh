@@ -32,7 +32,52 @@
 #   changeish --update
 set -euo pipefail
 
+default_prompt=$(cat <<'END_PROMPT'
+<<<INSTRUCTIONS>>>
+Task: Generate a changelog from the Git history that follows the structure below. 
+Be sure to use only the information from the Git history in your response.
 
+Output rules
+
+1. Use only information from the Git history provided in the prompt.
+2. Output **ONLY** valid Markdown.
+3. Use this exact hierarchy:
+
+   ## {version} ({date})
+
+   ### Enhancements
+
+   - ...
+
+   ### Fixes
+
+   - ...
+
+   ### Chores
+
+   - ...
+4. Omit any section that would be empty.
+
+Version ordering: newest => oldest (descending).
+
+### Example Output (for reference only)
+
+## v2.0.1 (2025-02-13)
+
+### Enhancements
+
+- Example enhancement A
+
+### Fixes
+
+- Example fix A
+
+### Chores
+
+- Example chore A
+<<<END>>>
+END_PROMPT
+)
 version_file=""
 default_version_files=("changes.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
@@ -124,13 +169,15 @@ generate_prompt() {
   local outfile="$1"
   local prompt_template="$2"
   local prompt
-  if [[ -f "$prompt_template" ]]; then
+  if [[ -n "$prompt_template" && -f "$prompt_template" ]]; then
     prompt="$(cat "$prompt_template")"
   else
-    prompt=$'\n=== INSTRUCTIONS===\nPlease generate a change log based on the provided Git History above. The change log should be grouped by version (descending), then by Enhancements, Fixes, and Chores. It is VERY IMPORTANT that you follow this format exactly and DO NOT include additional comments.\n\nHere is an example of the desired changelog format:\n\n## v2.0.213-3 (2025-02-13)\n\n### Enhancements\n\n- Some TODO clean up and started on authentication refactor.\n- Improved caching for available projects and organizations.\n- Refactored organization and project API clients for better cache usage.\n- Updated user profile editor to show loading state.\n\n### Fixes\n\n- Fixed issues with My Account page and user profile loading.\n- Moved processResponse to toast.js and improved notification handling.\n\n### Chores\n\n- Updated .vscode/settings.json to ignore build directory.\n- Updated documentation TODOs for v2.0 and v2.1.'
+    prompt="$default_prompt"  
   fi
-  complete_prompt=$(cat "$outfile")$prompt
-  echo "$complete_prompt" > prompt.md
+  echo "Generating prompt file from template: $prompt_template"
+  complete_prompt=$prompt\\n$(cat "$outfile")
+  echo -e "$complete_prompt" > prompt.md
+
   echo "Generated prompt file: prompt.md"
 }
 

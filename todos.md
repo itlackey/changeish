@@ -46,7 +46,7 @@
   ```
 - CHORE: write doc on using external APIs
 - ENHANCEMENT: load .env file to get API settings
-- CHORE: move default prompt template into sh file.
+- DONE: move default prompt template into sh file.
 - ENHANCEMENT: add option to create a prompt template based on the default
 - ENHANCEMENT: use temp files for history and prompt. save them based on args
 - ADDED: Help now shows the default version files the script will look for.
@@ -56,5 +56,5 @@
 - DONE: Added descriptions to help examples
 - ADDED: check to ensure we are in a git repository before running the script.
 - ADDED: Better version management for install & update
-- ENHANCEMENT: Improve default prompt text
+- ADDED: Improve default prompt text
 - ENHANCEMENT: Better git history formatted with more explict version and todo verbiage
