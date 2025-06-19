@@ -56,3 +56,5 @@
 - DONE: Added descriptions to help examples
 - ADDED: check to ensure we are in a git repository before running the script.
 - ADDED: Better version management for install & update
+- ENHANCEMENT: Improve default prompt text
+- ENHANCEMENT: Better git history formatted with more explict version and todo verbiage

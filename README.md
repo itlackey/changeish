@@ -46,6 +46,8 @@ changeish [OPTIONS]
 - `--prompt-only`           Generate prompt file only, do not generate or update changelog
 - `--version-file PATH`     File to check for version number changes in each commit (default: auto-detects common files)
 - `--help`                  Show usage information and exit
+- `--available-releases`    Show releases available on GitHub
+- `--update`                Update `changeish` to the latest release
 - `--version`               Show script version and exit
 
 ### Example
