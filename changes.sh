@@ -145,18 +145,18 @@ write_git_history() {
       if [[ -n "$found_version_file" ]]; then
         echo "**Version number changes in $found_version_file:**"
         echo '```diff'
-        git diff "$commit^!" -- "$found_version_file" | grep -i version || true
+        git diff "$commit^!" --unified=0 -- "$found_version_file" | grep -i version || true
         echo '```'
         echo
       fi
       echo "**Diffs for todos-related markdown files:**"
       echo '```diff'
-      git diff "$commit^!" -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
+      git diff "$commit^!" --unified=0 -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
       echo '```'
       
       echo "**Full diff:**"
       echo '```diff'
-      git diff "$commit^!" ':(exclude)*todo*.md'
+      git diff "$commit^!" --unified=0 --stat ':(exclude)*todo*.md'
       echo '```'    
       
       echo
@@ -170,12 +170,12 @@ generate_prompt() {
   local prompt_template="$2"
   local prompt
   if [[ -n "$prompt_template" && -f "$prompt_template" ]]; then
+    echo "Generating prompt file from template: $prompt_template"
     prompt="$(cat "$prompt_template")"
   else
     prompt="$default_prompt"  
   fi
-  echo "Generating prompt file from template: $prompt_template"
-  complete_prompt=$prompt\\n$(cat "$outfile")
+  complete_prompt=$prompt\\n"<<GIT HISTORY>>"\\n$(cat "$outfile")\\n"<<END>>"
   echo -e "$complete_prompt" > prompt.md
 
   echo "Generated prompt file: prompt.md"
@@ -320,6 +320,7 @@ fi
 if $current_changes; then
   outfile="git_history.md"
   {
+    echo ""
     echo "# Git History (Uncommitted Changes)"
     echo
     echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
@@ -336,18 +337,19 @@ if $current_changes; then
     echo
     echo "**Diff:**"
     echo '```diff'
-    git diff -- . ':(exclude)*todo*.md'
+    git diff --unified=0 --stat -- . ':(exclude)*todo*.md'
     echo '```'
     echo
     echo "**Diffs for todos-related markdown files:**"
     echo '```diff'
-    git diff -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
+    git diff --unified=0 -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
     echo '```'
   } > "$outfile"
   echo "Generated git history for uncommitted changes in $outfile."
 elif $staged_changes; then
   outfile="git_history.md"
   {
+    echo ""
     echo "# Git History (Staged Changes)"
     echo
     echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
@@ -357,19 +359,19 @@ elif $staged_changes; then
     if [[ -n "$found_version_file" ]]; then
       echo "**Version number changes in $found_version_file:**"
       echo '```diff'
-      git diff --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
+      git diff --unified=0 --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
       echo '```'
       echo
     fi
     echo
     echo "**Diff:**"
     echo '```diff'
-    git diff --cached -- . ':(exclude)*todo*.md'
+    git diff --unified=0 --stat --cached -- . ':(exclude)*todo*.md'
     echo '```'
     echo
     echo "**Diffs for todos-related markdown files:**"
     echo '```diff'
-    git diff --cached -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
+    git diff --unified=0 --cached -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
     echo '```'
   } > "$outfile"
   echo "Generated git history for staged changes in $outfile."

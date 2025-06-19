@@ -2,7 +2,7 @@
 set -e
 REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
-PROMPT_NAME="changelog_prompt.md"
+PROMPT_NAME="docs/prompt_template.md"
 INSTALL_DIR=""
 VERSION=""
 
