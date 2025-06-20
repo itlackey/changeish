@@ -124,7 +124,7 @@ show_available_releases() {
 
 # Print script version
 show_version() {
-    awk 'NR==2{sub(/^# Version: /, ""); print; exit}' "$0"
+    awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0"
     exit 0
 }
 
@@ -178,7 +178,7 @@ write_git_history() {
                 echo "**Version number changes in $found_version_file:**"
                 echo '```diff'
                 # Show lines with 'version' (added and removed) in the diff for the version file
-                git diff "$commit^!" --unified=0 -- "$found_version_file" | grep -Ei '^[+-].*version' || true
+                git diff "$commit^!" --unified=0 -- "$found_version_file"| grep -Ei '^[+-].*version' || true
                 echo '```'
                 echo
             fi
@@ -353,7 +353,7 @@ if [[ -n "$config_file" ]]; then
         exit 1
     fi
 elif [[ -f .env ]]; then
-    [[ $debug ]] && echo "Sourcing .env file..."
+    #[[ $debug ]] && echo "Sourcing .env file..."
     source .env
 fi
 
@@ -462,6 +462,12 @@ fi
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     echo "Error: Not a git repository. Please run this script inside a git repository." >&2
     exit 1
+fi
+
+# Check for at least one commit before using HEAD
+if ! git rev-parse HEAD >/dev/null 2>&1; then
+    echo "No commits found in repository. Nothing to show."
+    exit 0
 fi
 
 # If no specific range or mode is set, default to current uncommitted changes
