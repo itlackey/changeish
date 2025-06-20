@@ -1,63 +1,59 @@
 #!/usr/bin/env bash
-# Version: 0.1.10
+# changeish - A script to generate a changelog from Git history, optionally using AI (Ollama or remote API)
+# Version: 0.2.0 (unreleased)
 # Usage: changeish [OPTIONS]
 #
 # Options:
-#   --help                 Show this help message and exit
-#   --current              Use only uncommitted changes for git history (default)
-#   --staged               Use only staged changes for git history
-#   --all                  Include all history (from first commit to HEAD)
-#   --from REV             Set the starting commit (default: HEAD)
-#   --to REV               Set the ending commit (default: HEAD^)
-#   --short-diff           Show only diffs for todos-related markdown files
-#   --model MODEL          Specify the model to use (default: qwen2.5-coder)
+#   --help               Show this help message and exit
+#   --current            Use uncommitted (working tree) changes for git history
+#   --staged             Use staged (index) changes for git history
+#   --all                Include all history (from first commit to HEAD)
+#   --from REV           Set the starting commit (default: HEAD)
+#   --to REV             Set the ending commit (default: HEAD^)
+#   --include-pattern P  Show diffs for files matching pattern P (and exclude them from full diff)
+#   --exclude-pattern P  Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
+#   --model MODEL        Specify the local Ollama model to use (default: qwen2.5-coder)
+#   --remote             Use remote API for changelog generation instead of local model
+#   --api-model MODEL    Specify remote API model (overrides --model for remote usage)
+#   --api-url URL        Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
-#   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
-#   --prompt-only          Generate prompt file only, do not generate or insert changelog
-#   --version-file PATH    File to check for version number changes in each commit (default: auto-detects common files)
-#   --remote               Use remote API to generate changelog
-#   --api-model MODEL      Specify the remote API model to use (overrides --model for remote)
-#   --api-url URL          Specify the remote API URL for changelog generation
-#   --update               Update the script to the latest version and exit
-#   --version              Show script version and exit
-#   --available-releases   Show available releases and exit
+#   --prompt-template PATH  Path to prompt template file (default: ./changelog_prompt.md)
+#   --save-prompt        Generate prompt file only and do not produce changelog (replaces --prompt-only)
+#   --save-history       Do not delete the intermediate git history file (save it as git_history.md in working directory)
+#   --version-file PATH  File to check for version number changes in each commit (default: auto-detect common files)
+#   --update             Update this script to the latest version and exit
+#   --available-releases Show available script releases and exit
+#   --version            Show script version and exit
 #
 # Example:
-# Update change log with information about the uncommitted changes using local model:
-#   changeish 
-# Update change log with information about the staged changes:
+#   # Update changelog with uncommitted changes using local model:
+#   changeish
+#   # Update changelog with staged changes only:
 #   changeish --staged
-# Update change log with information from a specific commit range:
-#   changeish --from v1.0.0 --model llama3 --version-file custom_version.txt
-# Update change log with information about all history:
-#   changeish --all --changelog-file CHANGELOG.md
-# Update changeish to the latest changes:
-#   changeish --update
-# Use a remote API for changelog generation (with custom model and URL):
-#   changeish --remote --api-model llama3 --api-url https://api.example.com/v1/chat/completions
+#   # Generate changelog from specific commit range using local model:
+#   changeish --from v1.0.0 --to HEAD --model llama3 --version-file custom_version.txt
+#   # Include all history since start and write to custom changelog file:
+#   changeish --all --changelog-file ./docs/CHANGELOG.md
+#   # Use a remote API for generation:
+#   changeish --remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
+#
 # Environment variables:
-#   CHANGEISH_MODEL        Model to use for local generation (same as --model)
-#   CHANGEISH_API_KEY      API key for remote changelog generation (required if --remote is used)
-#   CHANGEISH_API_URL      API URL for remote changelog generation (same as --api-url)
-#   CHANGEISH_API_MODEL    API model for remote changelog generation (same as --api-model)
+#   CHANGEISH_MODEL       Default model to use for local generation (overridden by --model)
+#   CHANGEISH_API_KEY     API key for remote generation (required if --remote is used)
+#   CHANGEISH_API_URL     Default API URL for remote generation (overridden by --api-url)
+#   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
 set -euo pipefail
 
-# Source .env file in currend directory if it exists
-if [[ -f .env ]]; then
-  echo "Sourcing .env file..."
-  source .env
-fi
+debug=true
 
+# Define default prompt template (multi-line string) for AI generation
 default_prompt=$(cat <<'END_PROMPT'
 <<<INSTRUCTIONS>>>
-Task: Generate a changelog from the Git history that follows the structure below. 
-Be sure to use only the information from the Git history in your response.
-
+Task: Generate a changelog from the Git history that follows the structure below. Be sure to use only the information from the Git history in your response.
 Output rules
-
 1. Use only information from the Git history provided in the prompt.
-2. Output **ONLY** valid Markdown.
+2. Output **ONLY** valid Markdown on the format provided in these instructions.
 3. Use this exact hierarchy:
 
    ## {version} ({date})
@@ -95,373 +91,495 @@ Version ordering: newest => oldest (descending).
 <<<END>>>
 END_PROMPT
 )
-version_file=""
+
+# Common files to check for version changes if --version-file not specified
 default_version_files=("changes.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
+# Update the script to latest release
 update() {
-  latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
-  echo "Updating changeish to version $latest_version..."
-  curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
-  echo "Update complete."
-  exit 0
+    local latest_version
+    latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
+    echo "Updating changeish to version $latest_version..."
+    curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
+    echo "Update complete."
+    exit 0
 }
-# Print help and exit
+
+# Print usage information
 show_help() {
-  awk 'NR>2 && /^# /{sub(/^# /, ""); print} /^set -euo pipefail/{exit}' "$0"
-  echo "Default version files:"
-  for file in "${default_version_files[@]}"; do
-    echo "  $file"
-  done
-  exit 0
-}
-
-show_available_releases() {
-  curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[].tag_name'
-  exit 0
-}
-
-# Print version and exit
-show_version() {
-  awk 'NR==2{gsub(/^# /, ""); print; exit}' "$0"
-  exit 0
-}
-
-# Write git history to markdown file
-write_git_history() {
-  local outfile="$1"
-  local branch="$2"
-  local start="$3"
-  local end="$4"
-  local start_date="$5"
-  local end_date="$6"
-  shift 6
-  local commits=("$@")
-  {
-    echo "# Git History"
-    echo
-    echo "**Branch:** $branch"
-    echo
-    echo "**Range:** from \`$start\` ($start_date) to \`$end\` ($end_date)"
-    echo
-    for commit in "${commits[@]}"; do
-      name="$(git show -s --format=%s "$commit")"
-      date="$(git show -s --format=%ci "$commit")"
-      message="$(git show -s --format=%B "$commit")"
-      echo "## \`$commit\`"
-      echo
-      echo "**Commit:** $name"
-      echo
-      echo "**Date:** $date"
-      echo
-      echo "**Message:**"
-      echo '```'
-      printf '%s\n' "$message"
-      echo '```'
-      echo
-      # Version number changes section
-      if [[ -n "$found_version_file" ]]; then
-        echo "**Version number changes in $found_version_file:**"
-        echo '```diff'
-        git diff "$commit^!" --unified=0 -- "$found_version_file" | grep -i version || true
-        echo '```'
-        echo
-      fi
-      echo "**Diffs for todos-related markdown files:**"
-      echo '```diff'
-      git diff "$commit^!" --unified=0 -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
-      echo '```'
-      
-      echo "**Full diff:**"
-      echo '```diff'
-      git diff "$commit^!" --unified=0 --stat ':(exclude)*todo*.md'
-      echo '```'    
-      
-      echo
+    # Print the usage and options from the top comments of this script
+    awk 'NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
+    echo "Default version files to check for version changes:"
+    for file in "${default_version_files[@]}"; do
+        echo "  $file"
     done
-  } > "$outfile"
+    exit 0
 }
 
-# Generate prompt.md file
+# Show all available release tags
+show_available_releases() {
+    curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[].tag_name'
+    exit 0
+}
+
+# Print script version
+show_version() {
+    awk 'NR==2{sub(/^# Version: /, ""); print; exit}' "$0"
+    exit 0
+}
+
+# Write the git commit history and diffs (filtered) to a markdown file
+# Globals:
+#   found_version_file (if set, path of file to check for version changes)
+#   include_pattern (if set, pattern to include for detailed diffs)
+#   exclude_pattern (if set, pattern to exclude from full diff)
+# Arguments:
+#   $1: Output file path for history
+#   $2: Git branch name
+#   $3: Starting commit
+#   $4: Ending commit
+#   $5: Start commit date
+#   $6: End commit date
+#   $@: List of commit hashes (should be passed after the first 6 arguments)
+write_git_history() {
+    local outfile="$1"
+    local branch="$2"
+    local start="$3"
+    local end="$4"
+    local start_date="$5"
+    local end_date="$6"
+    shift 6
+    local commits=("$@")
+    {
+        echo "# Git History"
+        echo
+        echo "**Branch:** $branch"
+        echo
+        echo "**Range:** from \`$start\` ($start_date) to \`$end\` ($end_date)"
+        echo
+        for commit in "${commits[@]}"; do
+            local name date message
+            name="$(git show -s --format=%s "$commit")"
+            date="$(git show -s --format=%ci "$commit")"
+            message="$(git show -s --format=%B "$commit")"
+            echo "## \`$commit\`"
+            echo
+            echo "**Commit:** $name"
+            echo
+            echo "**Date:** $date"
+            echo
+            echo "**Message:**"
+            echo '```'
+            printf '%s\n' "$message"
+            echo '```'
+            echo
+            # If a version file was found, show version number changes in that file for this commit
+            if [[ -n "$found_version_file" ]]; then
+                echo "**Version number changes in $found_version_file:**"
+                echo '```diff'
+                # Show lines with 'version' (added and removed) in the diff for the version file
+                git diff "$commit^!" --unified=0 -- "$found_version_file" | grep -Ei '^[+-].*version' || true
+                echo '```'
+                echo
+            fi
+            # If include_pattern is set, show added lines from diffs for matching files
+            if [[ -n "$include_pattern" ]]; then
+                echo "**Diffs for files matching '$include_pattern':**"
+                echo '```diff'
+                git diff "$commit^!" --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
+                echo '```'
+                echo
+            fi
+            # Always show a summary of all other changes (exclude pattern files from full diff if specified)
+            echo "**Full diff:**"
+            echo '```diff'
+            if [[ -n "$exclude_pattern" ]]; then
+                git diff "$commit^!" --unified=0 --stat ":(exclude)*$exclude_pattern*"
+            else
+                git diff "$commit^!" --unified=0 --stat
+            fi
+            echo '```'
+            echo
+        done
+    } > "$outfile"
+}
+
+# Generate the prompt file by combining the prompt template and git history
+# Globals:
+#   default_prompt (the built-in prompt template text)
+#   prompt_file (output path for prompt file)
+# Arguments:
+#   $1: Path to git history markdown file
+#   $2: Path to custom prompt template file (optional)
 generate_prompt() {
-  local outfile="$1"
-  local prompt_template="$2"
-  local prompt
-  if [[ -n "$prompt_template" && -f "$prompt_template" ]]; then
-    echo "Generating prompt file from template: $prompt_template"
-    prompt="$(cat "$prompt_template")"
-  else
-    prompt="$default_prompt"  
-  fi
-  complete_prompt=$prompt\\n"<<GIT HISTORY>>"\\n$(cat "$outfile")\\n"<<END>>"
-  echo -e "$complete_prompt" > prompt.md
+    local history_file="$1"
+    local template_file="$2"
+    local prompt_text
+    if [[ -n "$template_file" && -f "$template_file" ]]; then
+        echo "Generating prompt file from template: $template_file"
+        prompt_text="$(cat "$template_file")"
+    else
+        prompt_text="$default_prompt"
+    fi
+    # Compose the final prompt by inserting markers and the git history content
+    local complete_prompt
+    complete_prompt="${prompt_text}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
+    echo -e "$complete_prompt" > "$prompt_file"
 
-  echo "Generated prompt file: prompt.md"
+    [[ $debug ]] && echo "Generated prompt content in $prompt_file"    
 }
 
-# Run Ollama model
+# Run the local Ollama model with the prompt file
+# Arguments:
+#   $1: Model name
+#   $2: Prompt file path
 run_ollama() {
-  local model="$1"
-  local prompt_file="$2"
-  ollama run "$model" < "$prompt_file"
+    local model="$1"
+    local prompt_file_path="$2"
+    if [[ $debug ]]; then
+        ollama run "$model" < "$prompt_file_path" --verbose
+    else
+        ollama run "$model" < "$prompt_file_path"
+    fi
 }
 
+# Call remote API to generate changelog based on prompt
+# Arguments:
+#   $1: Remote model name
+#   $2: Prompt file path
 generate_remote() {
-  local model="$1"
-  local prompt="$2"
-  local message=$(cat $prompt)
-  local response=""
-  response=$(curl -s -X POST $api_url \
-    -H "Authorization: Bearer $api_key" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n \
-      --arg model "$model" \
-      --arg content "$message" \
-      '{model: $model, messages: [{role: "user", content: $content}]}' \
-    )")
-  
-  #echo $response
-  # Parse the content of the last item in choices array
-  echo "$response" | jq -r '.choices[-1].message.content'
+    local model="$1"
+    local prompt_path="$2"
+    local message response result
+    message=$(cat "$prompt_path")
+    response=$(curl -s -X POST "$api_url" \
+        -H "Authorization: Bearer $api_key" \
+        -H "Content-Type: application/json" \
+        -d "$(jq -n --arg model "$model" --arg content "$message" \
+              '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}' \
+            )")
+
+    result=$(echo "$response" | jq -r '.choices[-1].message.content')
+    if [[ $debug ]]; then
+        echo "Response from remote API:" >&2
+        echo "$response" | jq . >&2
+    fi
+    echo "$result"
 }
 
-
-
-# Generate changelog using Ollama and insert into changelog file
+# Generate the changelog using either Ollama or remote API and insert it into the changelog file
+# Globals:
+#   remote (boolean, whether to use remote API)
+#   api_model (the model name for remote API)
+#   api_url, api_key (remote API endpoint and key)
+#   prompt_file (path to prompt file)
+# Arguments:
+#   $1: Model name (for local usage)
+#   $2: Changelog file path
 generate_changelog() {
-  local model="$1"
-  local changelog_file="$2"
- 
+    local model="$1"
+    local changelog_file_path="$2"
     local changelog
     if $remote; then
-      model="$api_model"
-      echo "Running remote model '$model'..."
-      changelog="$(generate_remote "$model" prompt.md)"
+        # Use remote API generation
+        model="$api_model"
+        echo "Running remote model '$model'..."
+        changelog="$(generate_remote "$model" "$prompt_file")"
     else
-      if command -v ollama &>/dev/null; then
-        echo "Running Ollama model '$model'..."
-        changelog="$(run_ollama "$model" prompt.md)"
-      else
-        echo "ollama not found, skipping changelog generation."
-        exit 0
-      fi
+        # Use local Ollama model if available
+        if command -v ollama >/dev/null 2>&1; then
+            echo "Running Ollama model '$model'..."
+            changelog="$(run_ollama "$model" "$prompt_file")"
+        else
+            echo "ollama not found, skipping changelog generation."
+            exit 0
+        fi
     fi
-    changelog="$changelog\n\nGenerated by changeish"
-    echo -e "\n## Changelog \(generated by changeish using $model\)\n"
+    # Append attribution to changelog content
+    changelog="${changelog}\\n\\nGenerated by changeish"
+    # Print the generated changelog for user reference
+    echo -e "\n## Changelog (generated by changeish using $model)\n"
     echo '```'
     echo "$changelog"
     echo '```'
-    insert_changelog "$changelog_file" "$changelog"
-
+    # Insert the changelog content into the specified changelog file
+    insert_changelog "$changelog_file_path" "$changelog"
 }
 
-# Insert changelog into changelog file
+# Insert the generated changelog content at the top of the changelog file (after the title line)
+# Arguments:
+#   $1: Changelog file path
+#   $2: Changelog content to insert
 insert_changelog() {
-  local changelog_file="$1"
-  local changelog="$2"
-  if [[ -f "$changelog_file" ]]; then
-    tmp="$(mktemp)"
-    changelog_tmp="$(mktemp)"
-    printf '%s\n' "$changelog" > "$changelog_tmp"
-    if grep -q '^## ' "$changelog_file"; then
-      awk -v changelog_file="$changelog_tmp" '
-        NR==1 {print; print ""; while ((getline line < changelog_file) > 0) print line; close(changelog_file); next}
-        /^## / {print; f=1; next}
-        {if(f) print; else next}
-      ' "$changelog_file" > "$tmp" && mv "$tmp" "$changelog_file"
+    local changelog_file_path="$1"
+    local new_content="$2"
+    if [[ -f "$changelog_file_path" ]]; then
+        local tmp_file changelog_tmp
+        tmp_file="$(mktemp)"
+        changelog_tmp="$(mktemp)"
+        printf '%s\n' "$new_content" > "$changelog_tmp"
+        if grep -q '^## ' "$changelog_file_path"; then
+            # Insert new content right after the first line (presumably the title or initial heading) and before existing entries
+            awk -v newfile="$changelog_tmp" 'NR==1 { print; print ""; while ((getline line < newfile) > 0) print line; close(newfile); next } /^## / { print; f=1; next } { if(f) print; else next }' "$changelog_file_path" > "$tmp_file" && mv "$tmp_file" "$changelog_file_path"
+        else
+            # If no second-level heading exists, just append the content
+            printf '\n%s\n' "$new_content" >> "$changelog_file_path"
+        fi
+        rm -f "$changelog_tmp"
+        echo "Inserted new changelog entry into '$changelog_file_path'."
     else
-      # No second-level heading found, append to end
-      printf '\n%s\n' "$changelog" >> "$changelog_file"
+        echo "Changelog file '$changelog_file_path' not found. Skipping insertion." >&2
     fi
-    rm -f "$changelog_tmp"
-    echo "Inserted fresh changelog into '$changelog_file'."
-  fi
 }
 
-# Defaults
+config_file=""
+# Parse --config-file argument if specified
+for ((i=1; i<=$#; i++)); do
+  if [[ "${!i}" == "--config-file" ]]; then
+    next=$((i+1))
+    config_file="${!next}"
+    break
+  fi
+done
+
+
+# Load configuration file if specified, otherwise source .env in current directory if present
+if [[ -n "$config_file" ]]; then
+    if [[ -f "$config_file" ]]; then
+        [[ $debug ]] && echo "Sourcing config file: $config_file"             
+        source "$config_file"
+    else
+        echo "Error: config file '$config_file' not found." >&2
+        exit 1
+    fi
+elif [[ -f .env ]]; then
+    [[ $debug ]] && echo "Sourcing .env file..."
+    source .env
+fi
+
+# Initialize default option values
 from_rev=""
 to_rev=""
 short_diff=false
-prompt_template="./changelog_prompt.md"
-prompt_only=false
-model="qwen2.5-coder"
+include_pattern=""
+exclude_pattern=""
+model="${CHANGEISH_MODEL:-qwen2.5-coder}"
 changelog_file="./CHANGELOG.md"
+prompt_template="./changelog_prompt.md"
+save_prompt=false
+save_history=false
+version_file=""
 all_history=false
 current_changes=false
 staged_changes=false
-outfile="git_history.md"
+outfile="history.md"
 show_releases=false
-api_url=$CHANGEISH_API_URL
-api_key=$CHANGEISH_API_KEY
-api_model=$CHANGEISH_API_MODEL
 remote=false
-# Parse args
+api_url="${CHANGEISH_API_URL:-}"
+api_key="${CHANGEISH_API_KEY:-}"
+api_model="${CHANGEISH_API_MODEL:-}"
+
+# Parse command-line arguments
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --from) from_rev="$2"; shift 2 ;;
-    --to) to_rev="$2"; shift 2 ;;
-    --short-diff) short_diff=true; shift ;;
-    --model) model="$2"; shift 2 ;;
-    --changelog-file) changelog_file="$2"; shift 2 ;;
-    --prompt-template) prompt_template="$2"; shift 2 ;;
-    --prompt-only) prompt_only=true; shift ;;
-    --version-file) version_file="$2"; shift 2 ;;
-    --current) current_changes=true; shift ;;
-    --staged) staged_changes=true; shift ;;
-    --all) all_history=true; shift ;;
-    --remote) remote=true; shift ;;
-    --api-model) api_model="$2"; shift 2 ;;
-    --api-url) api_url="$2"; shift 2 ;;
-    --update) update ;;
-    --available-releases) show_available_releases ;;
-    --help) show_help ;;
-    --version) show_version ;;
-    *) echo "Unknown arg: $1" >&2; exit 1 ;;
-  esac
+    case "$1" in
+        --from) from_rev="$2"; shift 2 ;;
+        --to) to_rev="$2"; shift 2 ;;
+        --include-pattern) include_pattern="$2"; shift 2 ;;
+        --exclude-pattern) exclude_pattern="$2"; shift 2 ;;
+        --model) model="$2"; shift 2 ;;
+        --remote) remote=true; shift ;;
+        --api-model) api_model="$2"; shift 2 ;;
+        --api-url) api_url="$2"; shift 2 ;;
+        --config-file) config_file="$2"; shift 2 ;;
+        --changelog-file) changelog_file="$2"; shift 2 ;;
+        --prompt-template) prompt_template="$2"; shift 2 ;;
+        --save-prompt) save_prompt=true; shift ;;
+        --save-history) save_history=true; shift ;;
+        --version-file) version_file="$2"; shift 2 ;;
+        --current) current_changes=true; shift ;;
+        --staged) staged_changes=true; shift ;;
+        --all) all_history=true; shift ;;
+        --update) update ;;
+        --available-releases) show_available_releases ;;
+        --help) show_help ;;
+        --version) show_version ;;
+        *) echo "Unknown arg: $1" >&2; exit 1 ;;
+    esac
 done
 
-if [[ ! -n "$api_model" ]]; then
-  api_model="$model"
+# If no remote model specified but remote flag is used, set defaults
+if $remote; then
+    if [[ -z "$api_model" ]]; then
+        api_model="$model"
+    fi
+    # Remote mode requires API key and URL
+    if [[ -z "$api_key" ]]; then
+        echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
+        exit 1
+    fi
+    if [[ -z "$api_url" ]]; then
+        echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+        exit 1
+    fi
 fi
 
-# After argument parsing, set current_changes if no relevant flags are set
-if ! $staged_changes && ! $all_history && [ -z "$to_rev" ] && [ -z "$from_rev" ]; then
-  current_changes=true
-else
-  current_changes=false
-  if [[ -z "$to_rev" ]]; then
-    to_rev="HEAD"
-  fi
-  if [[ -z "$from_rev" ]]; then
-    from_rev="HEAD"
-  fi
+
+
+# Apply environment variable overrides for model if not set via CLI
+if [[ -n "${CHANGEISH_MODEL:-}" && "$model" == "qwen2.5-coder" ]]; then
+    model="$CHANGEISH_MODEL"
 fi
 
+# Determine the file to track version changes
 found_version_file=""
 if [[ -n "$version_file" ]]; then
-  if [[ -f "$version_file" ]]; then
-    found_version_file="$version_file"
-  fi
-else
-  for vf in "${default_version_files[@]}"; do
-    if [[ -f "$vf" ]]; then
-      found_version_file="$vf"
-      break
+    if [[ -f "$version_file" ]]; then
+        found_version_file="$version_file"
     fi
-  done
+else
+    # Auto-detect: use first existing common version file
+    for vf in "${default_version_files[@]}"; do
+        if [[ -f "$vf" ]]; then
+            found_version_file="$vf"
+            break
+        fi
+    done
 fi
 
-
-
-# # print all parsed options
-# echo "Parsed options:"
-# echo "  current_changes: $current_changes"
-# echo "  staged_changes: $staged_changes"
-# echo "  all_history: $all_history"
-# echo "  from_rev: $from_rev"
-# echo "  to_rev: $to_rev"
-# echo "  short_diff: $short_diff"
-# echo "  model: $model"
-# echo "  changelog_file: $changelog_file"
-# echo "  prompt_template: $prompt_template"
-# echo "  prompt_only: $prompt_only"
-# echo "  version_file: $found_version_file"
-# if [[ -z "$found_version_file" ]]; then
-#   echo "No version file found. Skipping version number changes section." >&2
-# fi
-
-
-# Check if git is initialized
-if ! git rev-parse --is-inside-work-tree &>/dev/null; then
-  echo "Error: Not a git repository. Please run this script inside a git repository." >&2
-  exit 1
+# Decide on output filenames for history and prompt
+if $save_history; then
+    outfile="history.md"
+else
+    outfile="$(mktemp)"
+fi
+if $save_prompt; then
+    prompt_file="prompt.md"
+else
+    prompt_file="$(mktemp)"
 fi
 
-if $current_changes; then
-  outfile="git_history.md"
-  {
-    echo ""
-    echo "# Git History (Uncommitted Changes)"
-    echo
-    echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
-    echo
-    echo "**Uncommitted changes as of:** $(date)"
-    echo
-     if [[ -n "$found_version_file" ]]; then
-      echo "**Version number changes in $found_version_file:**"
-      echo '```diff'
-      git diff "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
-      echo '```'
-      echo
-    fi
-    echo
-    echo "**Diff:**"
-    echo '```diff'
-    git diff --unified=0 --stat -- . ':(exclude)*todo*.md'
-    echo '```'
-    echo
-    echo "**Diffs for todos-related markdown files:**"
-    echo '```diff'
-    git diff --unified=0 -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
-    echo '```'
-  } > "$outfile"
-  echo "Generated git history for uncommitted changes in $outfile."
-elif $staged_changes; then
-  outfile="git_history.md"
-  {
-    echo ""
-    echo "# Git History (Staged Changes)"
-    echo
-    echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
-    echo
-    echo "**Staged changes as of:** $(date)"    
-    echo
-    if [[ -n "$found_version_file" ]]; then
-      echo "**Version number changes in $found_version_file:**"
-      echo '```diff'
-      git diff --unified=0 --cached "$found_version_file" | grep -i version | grep '^+' | grep -v '^+++' || true
-      echo '```'
-      echo
-    fi
-    echo
-    echo "**Diff:**"
-    echo '```diff'
-    git diff --unified=0 --stat --cached -- . ':(exclude)*todo*.md'
-    echo '```'
-    echo
-    echo "**Diffs for todos-related markdown files:**"
-    echo '```diff'
-    git diff --unified=0 --cached -- '**/*.md' | grep -E 'diff --git a/.*todo.*\.md' -A100 | grep '^+' | grep -v '^+++' || true
-    echo '```'
-  } > "$outfile"
-  echo "Generated git history for staged changes in $outfile."
-else
-  
-  # Handle --all and default commit ranges
-  if $all_history; then
-    to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
-    from_rev="HEAD"
-  fi
-
-  echo "Using commit range: $to_rev^..$from_rev"
-  branch="$(git rev-parse --abbrev-ref HEAD)"
-  commits=( $(git rev-list --reverse "$to_rev^".."$from_rev") )
-  if [[ ${#commits[@]} -eq 0 ]]; then
-    echo "No commits found in range $to_rev^..$from_rev" >&2
+# Ensure we are in a git repository
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Error: Not a git repository. Please run this script inside a git repository." >&2
     exit 1
-  fi
-  start="${commits[0]}"
-  end="${commits[-1]}"
-  start_date="$(git show -s --format=%ci "$start")"
-  end_date="$(git show -s --format=%ci "$end")"
-  total_commits=${#commits[@]}
-  echo "Generating git history for total $total_commits commits from $start ($start_date) to $end ($end_date) on branch $branch..."
-  write_git_history "$outfile" "$branch" "$start" "$end" "$start_date" "$end_date" "${commits[@]}"
-  echo "Generated git history in $outfile."
 fi
 
-# Replace prompt generation and writing with function call
-generate_prompt "$outfile" "$prompt_template"
+# If no specific range or mode is set, default to current uncommitted changes
+if ! $staged_changes && ! $all_history && [[ -z "$to_rev" && -z "$from_rev" ]]; then
+    current_changes=true
+fi
 
-if ! $prompt_only; then
-  generate_changelog "$model" "$changelog_file"
+# Handle uncommitted (working tree) changes
+if $current_changes; then
+    {
+        echo ""
+        echo "# Git History (Uncommitted Changes)"
+        echo
+        echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
+        echo
+        echo "**Uncommitted changes as of:** $(date)"
+        echo
+        if [[ -n "$found_version_file" ]]; then
+            echo "**Version number changes in $found_version_file:**"
+            echo '```diff'
+            git diff --unified=0 "$found_version_file" | grep -Ei '^[+-].*version' || true
+            echo '```'
+            echo
+        fi
+        echo "**Diff:**"
+        echo '```diff'
+        if [[ -n "$exclude_pattern" ]]; then
+            git diff --unified=0 --stat -- ":(exclude)*$exclude_pattern*"
+        else
+            git diff --unified=0 --stat
+        fi
+        echo '```'
+        echo
+        if [[ -n "$include_pattern" ]]; then
+            echo "**Diffs for files matching '$include_pattern':**"
+            echo '```diff'
+            git diff --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
+            echo '```'
+            echo
+        fi
+    } > "$outfile"
+    echo "Generated git history for uncommitted changes in $outfile."
+
+# Handle staged (index) changes
+elif $staged_changes; then
+    {
+        echo ""
+        echo "# Git History (Staged Changes)"
+        echo
+        echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
+        echo
+        echo "**Staged changes as of:** $(date)"
+        echo
+        if [[ -n "$found_version_file" ]]; then
+            echo "**Version number changes in $found_version_file:**"
+            echo '```diff'
+            git diff --unified=0 --cached "$found_version_file" | grep -Ei '^.*version.*[vV]?[0-9]+\.[0-9]+(\.[0-9]+)?' || true
+            echo '```'
+            echo
+        fi
+        echo "**Diff:**"
+        echo '```diff'
+        if [[ -n "$exclude_pattern" ]]; then
+            git diff --minimal --unified=0 --stat --cached -- ":(exclude)*$exclude_pattern*"
+        else
+            git diff --minimal --unified=0 --stat --cached
+        fi
+        echo '```'
+        echo
+        if [[ -n "$include_pattern" ]]; then
+            echo "**Diffs for files matching '$include_pattern':**"
+            echo '```diff'
+            git diff --minimal --unified=0 --cached -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
+            echo '```'
+            echo
+        fi
+    } > "$outfile"
+    echo "Generated git history for staged changes in $outfile."
+
+# Handle a specified commit range (including --all)
+else
+    # If --all was specified, set from_rev to HEAD and to_rev to earliest commit
+    if $all_history; then
+        to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
+        from_rev="HEAD"
+    fi
+    if [[ -z "$to_rev" ]]; then to_rev="HEAD"; fi
+    if [[ -z "$from_rev" ]]; then from_rev="HEAD"; fi
+    echo "Using commit range: ${to_rev}^..${from_rev}"
+    # Collect commits in chronological order (oldest first)
+    if $all_history && ! git rev-parse --verify "${to_rev}^" >/dev/null 2>&1; then
+        range_spec="${to_rev}..${from_rev}"
+    else
+        range_spec="${to_rev}^..${from_rev}"
+    fi
+    mapfile -t commits < <(git rev-list --reverse "$range_spec")
+    if [[ ${#commits[@]} -eq 0 ]]; then
+        echo "No commits found in range ${to_rev}^..${from_rev}" >&2
+        exit 1
+    fi
+    start_commit="${commits[0]}"
+    end_commit="${commits[-1]}"
+    start_date="$(git show -s --format=%ci "$start_commit")"
+    end_date="$(git show -s --format=%ci "$end_commit")"
+    total_commits=${#commits[@]}
+    echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
+    write_git_history "$outfile" "$(git rev-parse --abbrev-ref HEAD)" "$start_commit" "$end_commit" "$start_date" "$end_date" "${commits[@]}"
+    echo "Generated git history in $outfile."
+fi
+
+# Create the prompt file from the git history
+generate_prompt "$outfile" "$prompt_template"
+generate_changelog "$model" "$changelog_file"
+
+# Cleanup: remove temp files if not saving them
+if ! $save_history; then
+    rm -f "$outfile"
+fi
+if ! $save_prompt; then
+    rm -f "$prompt_file"
 fi

@@ -3,14 +3,8 @@
 ## Pending
 
 - CHORE: Cleanup default output file names (ie. prompt.md, history.md)
-- ENHANCEMENT: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
-- ENHANCEMENT: add an --exclude-pattern arg
 - CHORE: write doc on using external APIs
-- ENHANCEMENT: add --config-file load .env file to get settings
 - ENHANCEMENT: add option to create a prompt template based on the default
-- ENHANCEMENT: use temp files for history and prompt. save them based on args
-- CHORE: replace --prompt-only with --save-prompt
-- CHORE: Add --save-history to Optionally save history file
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ENHANCEMENT: Better git history formatted with more explict version and todo verbiage
 
@@ -39,3 +33,9 @@
 - ADDED: check to ensure we are in a git repository before running the script.
 - ADDED: Better version management for install & update
 - ADDED: Improve default prompt text
+- ADDED: use temp files for history and prompt. save them based on args
+- DONE: replace --prompt-only with --save-prompt
+- DONE: Add --save-history to Optionally save history file
+- ADDED: add --config-file load .env file to get settings
+- ADDED: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
+- ADDED: add an --exclude-pattern arg
