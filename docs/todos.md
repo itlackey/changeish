@@ -2,12 +2,26 @@
 
 ## Pending
 
-- CHORE: Cleanup default output file names (ie. prompt.md, history.md)
 - CHORE: write doc on using external APIs
-- ENHANCEMENT: add option to create a prompt template based on the default
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
+- ENHANCEMENT: Add --debug arg to enable debug more
+- ENHANCEMENT: add option to create a prompt template based on the default
 - ENHANCEMENT: Better git history formatted with more explict version and todo verbiage
-
+- ENHANCEMENT: Add --generation-mode with allowed values of "auto", "local", "remote", and "none"
+- ENHANCEMENT: Add --update-mode with allowed values of "auto", "prepend", "append", and "update"
+- ENHANCEMENT: Add --section-name to specify which section to when updating the changelog.
+  - If not specified it should be generated based on the new or current version information in that priority order. 
+  - If not specified and no verison info can be found, then set section name to "Current Changes"
+  - If a matching section is found and it contains the current verison and the update-mode is either auto or update, that section should be sent to LLM with instructions to update the section with information about the git history.
+  - If matching section is found and the update mode is "auto" or "prepend" then insert the changelog content before the matching section
+  - If no matching section is found and the update mode is "auto" or "prepend" then insert the changelog content after the first # header and before the first ## heading
+  - If matching section is found and the update mode is "appened" then insert the changelog content after the matching section and before the next section or at the end of the file.
+  - If no matching section is found and the update mode is "append" then insert the changelog content at the end of the file.
+  - 
+- ENHANCEMENT: If no version changes are found, grep for existing/current verison info in the version file
+- ENHANCEMENT: Add --todo-pattern to use in addition to the include/exclude args. The diffs found in this pattern should be used in the todos history section instead of the --include-pattern files
+- CHORE: Refactor the handling of --include/exclude so it handles the general diff and not the todos section
+-  
 
 ## Completed
 
@@ -39,3 +53,5 @@
 - ADDED: add --config-file load .env file to get settings
 - ADDED: include a --include-pattern arg to replace the --short-diff arg to allow custom patterns during diff
 - ADDED: add an --exclude-pattern arg
+- DONE: Cleanup default output file names (ie. prompt.md, history.md)
+- FIXED: Always generates changelog, should be able only generate prompts

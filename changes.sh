@@ -574,7 +574,10 @@ fi
 
 # Create the prompt file from the git history
 generate_prompt "$outfile" "$prompt_template"
-generate_changelog "$model" "$changelog_file"
+
+if ! $save_prompt; then
+    generate_changelog "$model" "$changelog_file"
+fi
 
 # Cleanup: remove temp files if not saving them
 if ! $save_history; then

@@ -17,24 +17,20 @@ Contributions, stars, and feedback are welcome! If you find this project useful,
 - 💡 **Beginner-friendly**: Simple CLI, clear documentation, and example `.env` for quick setup.
 - 🌍 **Open source & community-driven**: Contributions, issues, and feature requests are encouraged!
 
+## How It Works
+
+- The script collects commit history and diffs in the specified range.
+- It detects version number changes in a user-specified file or common project files.
+- It generates a prompt combining the git history and a prompt template.
+- It sends the prompt to the specified Ollama model or remote API to generate a formatted changelog.
+- The changelog updated with the response from the LLM.
+
 ## Installation
 
 Run this in your terminal to install the latest version:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
-```
-
-To install a specific version:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh -s -- --version v0.1.9
-```
-
-To install the latest changes from the `main` branch:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh -s -- --version main
 ```
 
 ## Usage
@@ -45,102 +41,71 @@ changeish [OPTIONS]
 
 ### Options
 
-- `--current`               Only use current (uncommitted) changes in the prompt
-- `--staged`                Only use staged changes in the prompt
+- `--current`               Use uncommitted (working tree) changes for git history
+- `--staged`                Use staged (index) changes for git history
+- `--all`                   Include all history (from first commit to HEAD)
 - `--from REV`              Set the starting commit (default: HEAD)
 - `--to REV`                Set the ending commit (default: HEAD^)
-- `--all`                   Include all history (from first commit to HEAD)
-- `--short-diff`            Show only diffs for todos-related markdown files
-- `--model MODEL`           Specify the Ollama/local model to use (default: qwen2.5-coder)
+- `--include-pattern P`     Show diffs for files matching pattern P (and exclude them from full diff)
+- `--exclude-pattern P`     Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
+- `--model MODEL`           Specify the local Ollama model to use (default: qwen2.5-coder)
+- `--remote`                Use remote API for changelog generation instead of local model
+- `--api-model MODEL`       Specify remote API model (overrides --model for remote usage)
+- `--api-url URL`           Specify remote API endpoint URL for changelog generation
 - `--changelog-file PATH`   Path to changelog file to update (default: ./CHANGELOG.md)
 - `--prompt-template PATH`  Path to prompt template file (default: ./changelog_prompt.md)
-- `--prompt-only`           Generate prompt file only, do not generate or update changelog
-- `--version-file PATH`     File to check for version number changes in each commit (default: auto-detects common files)
-- `--remote`                Use a remote OpenAI-compatible API for changelog generation
-- `--api-model MODEL`       Specify the remote API model to use (overrides --model for remote)
-- `--api-url URL`           Specify the remote API URL for changelog generation
-- `--help`                  Show usage information and exit
-- `--available-releases`    Show releases available on GitHub
-- `--update`                Update `changeish` to the latest release
+- `--save-prompt`           Generate prompt file only and do not produce changelog (replaces --prompt-only)
+- `--save-history`          Do not delete the intermediate git history file (save it as git_history.md in working directory)
+- `--version-file PATH`     File to check for version number changes in each commit (default: auto-detect common files)
+- `--config-file PATH`      Load configuration from a .env file (overrides environment and CLI where set)
+- `--update`                Update this script to the latest version and exit
+- `--available-releases`    Show available script releases and exit
 - `--version`               Show script version and exit
+- `--help`                  Show usage information and exit
 
-### Environment Variables
-
-- `CHANGEISH_MODEL`         Model to use for local generation (same as --model)
-- `CHANGEISH_API_KEY`       API key for remote changelog generation (required if --remote is used)
-- `CHANGEISH_API_URL`       API URL for remote changelog generation (same as --api-url)
-- `CHANGEISH_API_MODEL`     API model for remote changelog generation (same as --api-model)
-
-See `.env.example` for configuration examples for Ollama, OpenAI, and Azure OpenAI.
+You can also set the relevant environment variables in a `.env` formatted file or your shell environment. See the [Configuration](./docs/configuration.md) doc for details.
 
 ### Examples
 
-Generate a changelog for all uncommitted changes using the local model:
+Generate a changelog with uncommitted changes using the local model:
 
 ```bash
 changeish
 ```
 
-Generate a changelog for all commits from `v1.0.0` to `HEAD` and use the `llama3` model for AI summarization:
+Generate a changelog with staged changes only:
 
-```sh
-changeish --from v1.0.0 --to HEAD --model llama3
+```bash
+changeish --staged
 ```
 
-Show version number changes in a specific file (e.g., `pyproject.toml`):
+Generate a changelog from a specific commit range using a local model:
 
-```sh
-changeish --from v1.0.0 --to HEAD --version-file pyproject.toml
+```bash
+changeish --from v1.0.0 --to HEAD --model llama3 --version-file custom_version.txt
 ```
 
-Generate only the prompt file (no changelog generation):
+Include all history since the start and write to a custom changelog file:
 
-```sh
-changeish --from v1.0.0 --to HEAD --prompt-only
+```bash
+changeish --all --changelog-file ./docs/CHANGELOG.md
 ```
 
-Use a remote OpenAI-compatible API for changelog generation (with custom model and URL):
+Use a remote API for changelog generation:
 
-```sh
-changeish --remote --api-model gpt-4o-mini --api-url https://api.openai.com/v1/chat/completions
+```bash
+changeish --remote --api-model qwen3 --api-url https://api.example.com/v1/chat/completions
 ```
-
-You can also set the relevant environment variables in a `.env` file or your shell environment. See `.env.example` for details.
-
-## How It Works
-
-- The script collects commit history and diffs in the specified range.
-- It detects version number changes in a user-specified file or common project files.
-- It generates a prompt combining the git history and a prompt template.
-- If not using `--prompt-only`, it sends the prompt to the specified Ollama model or remote API to generate a formatted changelog.
-- The changelog is inserted into the specified changelog file.
-
-## Configuration
-
-You can configure models and API endpoints using environment variables or a `.env` file. See `.env.example` for detailed examples for Ollama, OpenAI, and Azure OpenAI.
-
-- For local Ollama: set `CHANGEISH_MODEL` or use `--model`
-- For remote API: set `CHANGEISH_API_KEY`, `CHANGEISH_API_URL`, and `CHANGEISH_API_MODEL` or use the corresponding CLI flags
-
-> Note: For remote API usage, you must have a valid API key set in your environment variables or in a `.env` file. See `.env.example` for configuration.
 
 ## Requirements
 
 - Bash (or similiar shell)
+- [curl](https://curl.se/)
 - [Git](https://git-scm.com/)
 - [jq](https://jqlang.org/)
 - [Ollama](https://ollama.com/) (optional, for local AI changelog generation)
 
-> NOTE
-> jq can be installed using your systems package manager. 
-> use `brew install jq` on MacOS
-> use `sudo apt install jq` for Debian based Linux
-
-## Uninstall
-
-```bash
- rm $(which changeish )
-```
+See the [Installation](./docs/installation.md) doc for more details.
 
 ## License
 
