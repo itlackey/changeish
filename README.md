@@ -39,32 +39,6 @@ curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh 
 changeish [OPTIONS]
 ```
 
-### Options
-
-- `--current`               Use uncommitted (working tree) changes for git history
-- `--staged`                Use staged (index) changes for git history
-- `--all`                   Include all history (from first commit to HEAD)
-- `--from REV`              Set the starting commit (default: HEAD)
-- `--to REV`                Set the ending commit (default: HEAD^)
-- `--include-pattern P`     Show diffs for files matching pattern P (and exclude them from full diff)
-- `--exclude-pattern P`     Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
-- `--model MODEL`           Specify the local Ollama model to use (default: qwen2.5-coder)
-- `--remote`                Use remote API for changelog generation instead of local model
-- `--api-model MODEL`       Specify remote API model (overrides --model for remote usage)
-- `--api-url URL`           Specify remote API endpoint URL for changelog generation
-- `--changelog-file PATH`   Path to changelog file to update (default: ./CHANGELOG.md)
-- `--prompt-template PATH`  Path to prompt template file (default: ./changelog_prompt.md)
-- `--save-prompt`           Generate prompt file only and do not produce changelog (replaces --prompt-only)
-- `--save-history`          Do not delete the intermediate git history file (save it as git_history.md in working directory)
-- `--version-file PATH`     File to check for version number changes in each commit (default: auto-detect common files)
-- `--config-file PATH`      Load configuration from a .env file (overrides environment and CLI where set)
-- `--update`                Update this script to the latest version and exit
-- `--available-releases`    Show available script releases and exit
-- `--version`               Show script version and exit
-- `--help`                  Show usage information and exit
-
-You can also set the relevant environment variables in a `.env` formatted file or your shell environment. See the [Configuration](./docs/configuration.md) doc for details.
-
 ### Examples
 
 Generate a changelog with uncommitted changes using the local model:
@@ -96,6 +70,32 @@ Use a remote API for changelog generation:
 ```bash
 changeish --remote --api-model qwen3 --api-url https://api.example.com/v1/chat/completions
 ```
+
+### Options
+
+- `--current`               Use uncommitted (working tree) changes for git history
+- `--staged`                Use staged (index) changes for git history
+- `--all`                   Include all history (from first commit to HEAD)
+- `--from REV`              Set the starting commit (default: HEAD)
+- `--to REV`                Set the ending commit (default: HEAD^)
+- `--include-pattern P`     Show diffs for files matching pattern P (and exclude them from full diff)
+- `--exclude-pattern P`     Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
+- `--model MODEL`           Specify the local Ollama model to use (default: qwen2.5-coder)
+- `--remote`                Use remote API for changelog generation instead of local model
+- `--api-model MODEL`       Specify remote API model (overrides --model for remote usage)
+- `--api-url URL`           Specify remote API endpoint URL for changelog generation
+- `--changelog-file PATH`   Path to changelog file to update (default: ./CHANGELOG.md)
+- `--prompt-template PATH`  Path to prompt template file (default: ./changelog_prompt.md)
+- `--save-prompt`           Generate prompt file only and do not produce changelog (replaces --prompt-only)
+- `--save-history`          Do not delete the intermediate git history file (save it as git_history.md in working directory)
+- `--version-file PATH`     File to check for version number changes in each commit (default: auto-detect common files)
+- `--config-file PATH`      Load configuration from a .env file (overrides environment and CLI where set)
+- `--update`                Update this script to the latest version and exit
+- `--available-releases`    Show available script releases and exit
+- `--version`               Show script version and exit
+- `--help`                  Show usage information and exit
+
+You can also set the relevant environment variables in a `.env` formatted file or your shell environment. See the [Configuration](./docs/configuration.md) doc for details.
 
 ## Requirements
 
