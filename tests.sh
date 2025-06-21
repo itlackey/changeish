@@ -56,6 +56,7 @@ run_test() {
 }
 
 generate_commits() {
+    echo "bin" > .gitignore && git add .gitignore
     # Helper to generate a series of commits for testing.
     echo "a" > a.txt && git add a.txt && git commit -m "a"
     echo "b" > b.txt && git add b.txt && git commit -m "b"
@@ -86,12 +87,12 @@ mock_curl() {
     fi
     local response
     response='{
-            "id": "chatcmpl-B9MBs8CjcvOU2jLn4n570S5qMJKcT",
-            "object": "chat.completion",
-            "created": 1741569952,
-            "model": "'"$model"'",
-            "choices": [
-                {
+        "id": "chatcmpl-B9MBs8CjcvOU2jLn4n570S5qMJKcT",
+        "object": "chat.completion",
+        "created": 1741569952,
+        "model": "'"$model"'",
+        "choices": [
+            {
                 "index": 0,
                 "message": {
                     "role": "assistant",
@@ -101,25 +102,25 @@ mock_curl() {
                 },
                 "logprobs": null,
                 "finish_reason": "stop"
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 19,
-                "completion_tokens": 10,
-                "total_tokens": 29,
-                "prompt_tokens_details": {
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 19,
+            "completion_tokens": 10,
+            "total_tokens": 29,
+            "prompt_tokens_details": {
                 "cached_tokens": 0,
                 "audio_tokens": 0
-                },
-                "completion_tokens_details": {
+            },
+            "completion_tokens_details": {
                 "reasoning_tokens": 0,
                 "audio_tokens": 0,
                 "accepted_prediction_tokens": 0,
                 "rejected_prediction_tokens": 0
-                }
-            },
-            "service_tier": "default"
-        }'
+            }
+        },
+        "service_tier": "default"
+    }'
     
     mkdir -p bin
     echo '#!/bin/bash' > bin/curl
@@ -272,6 +273,7 @@ test_version_detection_pyproject() {
 }
 
 test_version_detection_setup_py() {
+    #generate_commits
     echo -e "__version__ = \"4.5.5\"" > setup.py
     git add setup.py && git commit -m "add setup"
     echo "b" > b.txt && git add b.txt && git commit -m "fix: setup"
@@ -293,6 +295,58 @@ test_save_prompt_and_history() {
     cat history.md
     fail_if_not_found "<<<GIT HISTORY>>>" prompt.md "Commit not found in saved prompt" || return 1
     fail_if_not_found "updated text" history.md "Commit not found in saved history" || return 1
+}
+
+# test_history_format_uncommitted
+# -------------------
+# This test function verifies the correct formatting and content of the generated history file
+# when using the $CHANGEISH_SCRIPT with the --save-history and --include-pattern options.
+#
+# Steps:
+# 1. Sets up a simulated project environment by:
+#    - Writing a version string to setup.py.
+#    - Adding initial tasks to todos.md.
+#    - Committing these changes to git.
+# 2. Updates setup.py and todos.md to simulate a new version and completed tasks.
+# 3. Mocks the ollama command to avoid external dependencies.
+# 4. Runs the $CHANGEISH_SCRIPT to generate a history.md file, including only changes to todos.md.
+# 5. Outputs the generated history.md for inspection.
+# 6. Compares the generated history.md to an expected file, ignoring whitespace, blank lines,
+#    and lines starting with '**Date:**'. Prints "Matched" if identical, otherwise shows differences.
+# 7. Checks that specific expected content is present in history.md:
+#    - Version number changes in setup.py.
+#    - The new version number (4.5.6).
+#    - Diffs for files matching 'todos.md'.
+#    - Specific task entries (ENHANCEMENT, DONE, ADDED) in the todos.md diff.
+# 8. Cleans up by removing the generated history.md file.
+test_history_format_uncommitted() {
+    echo -e "__version__ = \"4.5.5\"" > setup.py
+    echo "CHORE: setup.py version bump" > todos.md
+    echo "ENHANCEMENT: do cool stuff" >> todos.md
+    git add . && git commit -m "add setup"
+    
+    echo -e "__version__ = \"4.5.6\"" > setup.py
+    echo "DONE: setup.py version bump" > todos.md
+    echo "ADDED: do cool stuff" >> todos.md
+
+    mock_ollama "dummy" ""
+    "$CHANGEISH_SCRIPT" --save-history --include-pattern "todos.md"
+    cat history.md
+    # Filter out lines starting with '**Date:**', and print 'Matched' if no differences
+    if diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md >/dev/null; then
+        echo "Matched"
+    else
+        echo "Differences found:"
+        diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md
+    fi
+
+    fail_if_not_found "Version number changes in setup.py" history.md "Version number changes not found in history"
+    fail_if_not_found "4.5.6" history.md "Version [4.5.6] not found in history"
+    fail_if_not_found "Diffs for files matching 'todos.md'" history.md "Diffs for todos.md not found in history"
+    fail_if_not_found "ENHANCEMENT: do cool stuff" history.md "Enhancement not found in todos.md diff"
+    fail_if_not_found "DONE: setup.py version bump" history.md "Done task not found in todos.md diff"
+    fail_if_not_found "ADDED: do cool stuff" history.md "Added task not found in todos.md diff"
+    rm -f history.md
 }
 
 # --- META / early exit paths ---
@@ -359,14 +413,14 @@ test_mode_default_current() {
     git add file.txt && git commit -m "init"
     echo "x" > file.txt
     "$CHANGEISH_SCRIPT" --save-history
-    grep -q "Git History (Uncommitted Changes)" history.md
+    grep -q "**Uncommitted changes**" history.md
 }
 test_mode_explicit_current() {
     echo "x" > file.txt
     git add file.txt && git commit -m "init"
     echo "x" > file.txt
     "$CHANGEISH_SCRIPT" --current --save-history
-    grep -q "Git History (Uncommitted Changes)" history.md
+    grep -q "**Uncommitted changes**" history.md
 }
 test_mode_staged() {
     echo "x" > file.txt
@@ -444,7 +498,7 @@ test_include_and_exclude() {
 # --- OUTPUT control ---
 test_output_save_history() {
     generate_commits
-    echo "a" > a.txt 
+    echo "a" > a.txt
     "$CHANGEISH_SCRIPT" --save-history
     [ -f history.md ]
     ! [ -f prompt.md ]
@@ -665,7 +719,11 @@ run_test "Remote changelog generation" test_remote_changelog
 run_test "Version detection (pyproject.toml)" test_version_detection_pyproject
 run_test "Version detection (pyproject.toml - staged)" test_version_detection_staged_pyproject
 run_test "Version detection (setup.py)" test_version_detection_setup_py
+
+## History and prompt saving tests
 run_test "Save prompt and history files" test_save_prompt_and_history
+run_test "History: File format --current" test_history_format_uncommitted
+
 run_test "Meta: --help prints usage" test_meta_help
 run_test "Meta: --version prints version" test_meta_version
 run_test "Meta: --available-releases prints tags" test_meta_available_releases

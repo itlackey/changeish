@@ -482,11 +482,10 @@ fi
 if $current_changes; then
     {
         echo ""
-        echo "# Git History (Uncommitted Changes)"
-        echo
+        echo "# Git History"
+        echo "**Date:** $(date)"        
         echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
-        echo
-        echo "**Uncommitted changes as of:** $(date)"
+        echo "**Uncommitted changes**"
         echo
         if [[ -n "$found_version_file" ]]; then
             echo "**Version number changes in $found_version_file:**"
