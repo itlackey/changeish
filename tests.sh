@@ -27,7 +27,6 @@ run_test() {
     local do_git_init="${3:-true}"
     local TMP_REPO_DIR
     TMP_REPO_DIR="$(mktemp -d)"
-    trap 'rm -rf "$TMP_REPO_DIR"' EXIT
     
     local ORIG_DIR="$PWD"
     #echo "Running test: $name"
@@ -38,6 +37,7 @@ run_test() {
         git init -q
     fi
     (
+        trap 'rm -rf "$TMP_REPO_DIR"' EXIT
         mock_ollama "dummy" ""  # Mock ollama binary for tests
         # Sourcing the script with a guard so only function definitions are loaded.
         CHANGEISH_TEST_CHILD=1 source "$SCRIPT_DIR/$(basename "$0")"
