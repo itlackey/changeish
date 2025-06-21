@@ -2,7 +2,8 @@
 
 ### Version changes
 ```diff
--__version__ = "4.5.5" +__version__ = "4.5.6"
+-__version__ = "4.5.5"
++__version__ = "4.5.6"
 ```
 setup.py
 

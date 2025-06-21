@@ -63,7 +63,6 @@ all_history=false
 current_changes=false
 staged_changes=false
 outfile="history.md"
-show_releases=false
 remote=false
 api_url="${CHANGEISH_API_URL:-}"
 api_key="${CHANGEISH_API_KEY:-}"
@@ -175,26 +174,30 @@ build_entry() {
 
   # if this is a true commit (hash^!), show commit summary
   if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
-    echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" >> "$outfile"
-    echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")" >> "$outfile"
-    echo "**Message:**" >> "$outfile"
-    echo '```' >> "$outfile"
-    git show -s --format=%B "${diff_spec[@]}" >> "$outfile"
-    echo '```' >> "$outfile"
+  {
+    echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" 
+    echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")"
+    echo "**Message:**"
+    echo '```'
+    git show -s --format=%B "${diff_spec[@]}"
+    echo '```' 
+  }>> "$outfile"
   fi
 
   [[ $debug ]] && echo "Version diff: ${found_version_file}"
   # version‐file diff
   if [[ -n "$found_version_file" ]]; then
-    echo >> "$outfile"
-    echo "### Version changes" >> "$outfile"
-    echo '```diff' >> "$outfile"
-    if [[ ${#diff_spec[@]} -gt 0 ]]; then
-        echo $(git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true) >> "$outfile"
-    else
-        echo $(git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true) >> "$outfile"
-    fi
-    echo '```' >> "$outfile"
+    { 
+        echo ""
+        echo "### Version changes"
+        echo '```diff'
+        if [[ ${#diff_spec[@]} -gt 0 ]]; then
+            git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version'
+        else
+            git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version'
+        fi
+        echo '```'
+    } >> "$outfile"
     [[ $debug ]] && echo "$found_version_file" >> "$outfile"
   fi
 
@@ -385,6 +388,7 @@ done
 if [[ -n "$config_file" ]]; then
     if [[ -f "$config_file" ]]; then
         [[ $debug ]] && echo "Sourcing config file: $config_file"             
+        # shellcheck disable=SC1090
         source "$config_file"
     else
         echo "Error: config file '$config_file' not found." >&2
@@ -392,6 +396,7 @@ if [[ -n "$config_file" ]]; then
     fi
 elif [[ -f .env ]]; then
     [[ $debug ]] && echo "Sourcing .env file..."
+    # shellcheck disable=SC1091
     source .env
 fi
 

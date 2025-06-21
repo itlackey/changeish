@@ -40,6 +40,8 @@ run_test() {
         trap 'rm -rf "$TMP_REPO_DIR"' EXIT
         mock_ollama "dummy" ""  # Mock ollama binary for tests
         # Sourcing the script with a guard so only function definitions are loaded.
+        
+        # shellcheck disable=SC1090
         CHANGEISH_TEST_CHILD=1 source "$SCRIPT_DIR/$(basename "$0")"
         $fn > "$LOGFILE" 2>&1
     )
@@ -345,7 +347,7 @@ test_history_format_uncommitted() {
         diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md
     fi
 
-    fail_if_not_found '\-\_\_version\_\_ = \"4.5.5\" +\_\_version\_\_ = \"4.5.6\"' history.md "Version number changes not found in history"
+    fail_if_not_found '\_\_version\_\_ = "4.5.6"' history.md "Version number changes not found in history"
     fail_if_not_found "4.5.6" history.md "Version 4.5.6 not found in history"
     fail_if_not_found "### Changes in TODOs" history.md "Diffs for todos.md not found in history"
     fail_if_not_found "ENHANCEMENT: do cool stuff" history.md "Enhancement not found in todos.md diff"
@@ -572,7 +574,8 @@ test_version_auto_detect() {
     "$CHANGEISH_SCRIPT" --all --save-history --debug
     cat history.md 
     fail_if_not_found '### Version changes' history.md "Version changes section not found in history"
-    grep -Pzoq '### Version changes\n```diff\n-.*version.*\+.*version.*\n```' history.md
+    # shellcheck disable=SC2016
+    grep -Pzoq '### Version changes\n```diff\n-.*version.*\n\+.*version.*\n```' history.md
     if [[ $? -ne 0 ]]; then
         echo "❌ Version changes not found in history.md" >&2
         return 1
@@ -587,7 +590,8 @@ test_version_explicit_file() {
     "$CHANGEISH_SCRIPT" --version-file "my.ver" --all --save-history --debug
     cat history.md
     fail_if_not_found '### Version changes' history.md "Version changes section not found in history"
-    grep -Pzoq '### Version changes\n```diff\n-.*\+.*\n```' history.md
+    # shellcheck disable=SC2016
+    grep -Pzoq '### Version changes\n```diff\n-.*\n\+.*\n```' history.md
     if [[ $? -ne 0 ]]; then
         echo "❌ Version changes not found in history.md" >&2
         return 1
