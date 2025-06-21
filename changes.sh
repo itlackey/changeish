@@ -52,6 +52,7 @@ to_rev=""
 default_diff_options="--patience --unified=0 --no-color -b -w --compact-summary --color-moved=no"
 include_pattern=""
 exclude_pattern=""
+todo_pattern="*todo*"
 model="${CHANGEISH_MODEL:-qwen2.5-coder}"
 changelog_file="./CHANGELOG.md"
 prompt_template="./changelog_prompt.md"
@@ -67,6 +68,7 @@ remote=false
 api_url="${CHANGEISH_API_URL:-}"
 api_key="${CHANGEISH_API_KEY:-}"
 api_model="${CHANGEISH_API_MODEL:-}"
+default_todo_grep_pattern="TODO|FIXME|ENHANCEMENT|DONE|CHORE"
 
 # Define default prompt template (multi-line string) for AI generation
 default_prompt=$(cat <<'END_PROMPT'
@@ -160,15 +162,17 @@ show_version() {
 #   $1: label to display (hash or “Staged Changes” / “Working Tree”)
 #   $2: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
 build_entry() {
-    local label="$1"
-    local diff_spec
-    if [[ -n "$2" ]]; then
-        diff_spec=($2)
-    else
-        diff_spec=()
-    fi
-
+  local label="$1"
+  local diff_spec
+  if [[ -n "$2" ]]; then
+      diff_spec=($2)
+  else
+      diff_spec=()
+  fi
+  
+  echo "Building entry for: $label"
   echo "## $label" >> "$outfile"
+
   # if this is a true commit (hash^!), show commit summary
   if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
     echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" >> "$outfile"
@@ -179,6 +183,7 @@ build_entry() {
     echo '```' >> "$outfile"
   fi
 
+  [[ $debug ]] && echo "Version diff: ${found_version_file}"
   # version‐file diff
   if [[ -n "$found_version_file" ]]; then
     echo >> "$outfile"
@@ -193,37 +198,47 @@ build_entry() {
     [[ $debug ]] && echo "$found_version_file" >> "$outfile"
   fi
 
-  # include_pattern diffs
-  if [[ -n "$include_pattern" ]]; then
+  [[ $debug ]] && echo "TODOs diff: ${todo_pattern}"
+  if [[ $debug ]]; then
+    git diff --unified=0 -- "*todo*"
+  fi
+  if [[ -n "$todo_pattern" ]]; then
     echo >> "$outfile"
-    echo "### Changes in files (matching '$include_pattern')" >> "$outfile"
+    echo "### Changes in TODOs" >> "$outfile"
     echo '```diff' >> "$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" $default_diff_options -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+      echo -e "$(git diff "${diff_spec[@]}" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)" >> "$outfile"
+      #git diff "${diff_spec[@]}" $default_diff_options -- "*$todo_pattern*" | grep -E $default_todo_grep_pattern || true >> "$outfile"
+      #git diff "${diff_spec[@]}" $default_diff_options -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
     else
-      git diff $default_diff_options "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+      echo -e "$(git diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)" >> "$outfile"
     fi
     echo '```' >> "$outfile"
   fi
 
   # full diff stat
-  echo >> "$outfile"
-  echo "### Changes in files" >> "$outfile"
-  echo '```diff' >> "$outfile"
-  if [[ -n "$exclude_pattern" ]]; then
-    if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" $default_diff_options ":(exclude)*$exclude_pattern*" >> "$outfile"
-    else
-      git diff $default_diff_options ":(exclude)*$exclude_pattern*" >> "$outfile"
+    [[ $debug ]] && echo "Include pattern: $include_pattern"
+    [[ $debug ]] && echo "Exclude pattern: $exclude_pattern"
+    echo >> "$outfile"
+    echo "### Changes in files" >> "$outfile"
+    # Prepare the diff arguments based on include/exclude patterns
+    diff_args=()
+    if [[ -n "$include_pattern" ]]; then
+      diff_args+=("*$include_pattern*")
     fi
-  else
-    if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" $default_diff_options >> "$outfile"
-    else
-      git diff $default_diff_options >> "$outfile"
+    if [[ -n "$exclude_pattern" ]]; then
+      diff_args+=(":(exclude)*$exclude_pattern*")
     fi
-  fi
-  echo '```' >> "$outfile"
+    [[ $debug ]] && echo "Full diff: ${diff_args:-""}"
+
+    echo '```diff' >> "$outfile"
+    if [[ ${#diff_spec[@]} -gt 0 ]]; then
+      git diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >> "$outfile"
+    else
+      git diff $default_diff_options -- "${diff_args[@]}" >> "$outfile"
+    fi
+    echo '```' >> "$outfile"
+
   echo >> "$outfile"
 }
 
@@ -491,8 +506,14 @@ if [[ $debug ]]; then
     echo "Prompt template: $prompt_template"
     echo "Version file: $found_version_file"
     echo "All history: $all_history"
+    echo "Current changes: $current_changes"
+    echo "Staged changes: $staged_changes"
+    echo "Save prompt: $save_prompt"
+    echo "Save history: $save_history"
     echo "Include pattern: $include_pattern"
     echo "Exclude pattern: $exclude_pattern"
+    echo "TODO pattern: $todo_pattern"
+    echo "TODO grep pattern: $default_todo_grep_pattern"
 fi
 
 # Handle uncommitted (working tree) changes

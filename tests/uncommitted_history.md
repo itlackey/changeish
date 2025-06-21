@@ -6,8 +6,12 @@
 ```
 setup.py
 
-### Changes in files (matching 'todos.md')
+### Changes in TODOs
 ```diff
+-CHORE: setup.py version bump
+-ENHANCEMENT: do cool stuff
++DONE: setup.py version bump
++ADDED: do cool stuff
 ```
 
 ### Changes in files

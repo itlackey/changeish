@@ -335,7 +335,7 @@ test_history_format_uncommitted() {
     echo "ADDED: do cool stuff" >> todos.md
 
     mock_ollama "dummy" ""
-    "$CHANGEISH_SCRIPT" --save-history --include-pattern "todos.md"
+    "$CHANGEISH_SCRIPT" --save-history --debug
     cat history.md
     # Filter out lines starting with '**Date:**', and print 'Matched' if no differences
     if diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md >/dev/null; then
@@ -347,7 +347,7 @@ test_history_format_uncommitted() {
 
     fail_if_not_found '\-\_\_version\_\_ = \"4.5.5\" +\_\_version\_\_ = \"4.5.6\"' history.md "Version number changes not found in history"
     fail_if_not_found "4.5.6" history.md "Version 4.5.6 not found in history"
-    fail_if_not_found "### Changes in files (matching 'todos.md')" history.md "Diffs for todos.md not found in history"
+    fail_if_not_found "### Changes in TODOs" history.md "Diffs for todos.md not found in history"
     fail_if_not_found "ENHANCEMENT: do cool stuff" history.md "Enhancement not found in todos.md diff"
     fail_if_not_found "DONE: setup.py version bump" history.md "Done task not found in todos.md diff"
     fail_if_not_found "ADDED: do cool stuff" history.md "Added task not found in todos.md diff"
