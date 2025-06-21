@@ -155,20 +155,35 @@ EOF
     fail_if_not_found "Hello! How can I assist you today?" CHANGELOG.md "Changelog missing mocked remote entry"
 }
 
+# --- UPDATE MODES ---
 test_update_modes() {
     for mode in prepend append update auto; do
-        for scenario in no_section has_section; do
-            if [ "$scenario" = "has_section" ]; then
+        for scenario in empty_changelog preexisting_unreleased; do
+            rm -f CHANGELOG.md
+            if [ "$scenario" = "preexisting_unreleased" ]; then
                 echo -e "## [Unreleased] - 2025-06-01\n- 📦 Existing entry" > CHANGELOG.md
             else
                 touch CHANGELOG.md
             fi
-            git add CHANGELOG.md && git commit -m "init"
-            echo "change" > file.txt && git add file.txt && git commit -m "feat: $mode test"
-            
-            export PATH="$PWD/bin:$PATH"
-            "$CHANGEISH_SCRIPT" --update-mode "$mode"
-            fail_if_not_found "Test entry for mode $mode" CHANGELOG.md "Missing entry for mode '$mode'" || return 1
+            git add CHANGELOG.md && git commit -m "init $scenario"
+            echo "change for $mode/$scenario" > file.txt && git add file.txt && git commit -m "feat: $mode $scenario"
+            mock_ollama "dummy" "Test entry for mode $mode/$scenario"
+            "$CHANGEISH_SCRIPT" --update-mode "$mode" > out.txt 2>&1
+            # Check that the test entry appears in the changelog
+            grep -q "Test entry for mode $mode/$scenario" CHANGELOG.md || {
+                echo "❌ Missing entry for mode '$mode' in scenario '$scenario'" >&2
+                cat out.txt
+                cat CHANGELOG.md
+                return 1
+            }
+            # For update/auto, ensure existing entries are preserved
+            if [ "$scenario" = "preexisting_unreleased" ] && [[ "$mode" =~ ^(update|auto)$ ]]; then
+                grep -q "Existing entry" CHANGELOG.md || {
+                    echo "❌ Existing entry missing after $mode/$scenario" >&2
+                    cat CHANGELOG.md
+                    return 1
+                }
+            fi
         done
     done
 }
