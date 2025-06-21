@@ -1,16 +1,16 @@
 ## Working Tree
 
-**Version changes in setup.py:**
+### Version changes
 ```diff
--__version__ = "4.5.5"
-+__version__ = "4.5.6"
+-__version__ = "4.5.5" +__version__ = "4.5.6"
+```
+setup.py
+
+### Changes in files (matching 'todos.md')
+```diff
 ```
 
-**Diffs for files matching 'todos.md':**
-```diff
-```
-
-**Full diff:**
+### Changes in files
 ```diff
  setup.py | 2 +-
  todos.md | 4 ++--

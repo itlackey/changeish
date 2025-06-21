@@ -45,7 +45,28 @@
 #
 set -euo pipefail
 
-debug=true
+# Initialize default option values
+debug=false
+from_rev=""
+to_rev=""
+default_diff_options="--patience --unified=0 --no-color -b -w --compact-summary --color-moved=no"
+include_pattern=""
+exclude_pattern=""
+model="${CHANGEISH_MODEL:-qwen2.5-coder}"
+changelog_file="./CHANGELOG.md"
+prompt_template="./changelog_prompt.md"
+save_prompt=false
+save_history=false
+version_file=""
+all_history=false
+current_changes=false
+staged_changes=false
+outfile="history.md"
+show_releases=false
+remote=false
+api_url="${CHANGEISH_API_URL:-}"
+api_key="${CHANGEISH_API_KEY:-}"
+api_model="${CHANGEISH_API_MODEL:-}"
 
 # Define default prompt template (multi-line string) for AI generation
 default_prompt=$(cat <<'END_PROMPT'
@@ -150,11 +171,8 @@ build_entry() {
   echo "## $label" >> "$outfile"
   # if this is a true commit (hash^!), show commit summary
   if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
-    echo >> "$outfile"
     echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" >> "$outfile"
-    echo >> "$outfile"
     echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")" >> "$outfile"
-    echo >> "$outfile"
     echo "**Message:**" >> "$outfile"
     echo '```' >> "$outfile"
     git show -s --format=%B "${diff_spec[@]}" >> "$outfile"
@@ -164,45 +182,45 @@ build_entry() {
   # version‐file diff
   if [[ -n "$found_version_file" ]]; then
     echo >> "$outfile"
-    echo "**Version changes in $found_version_file:**" >> "$outfile"
+    echo "### Version changes" >> "$outfile"
     echo '```diff' >> "$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" --unified=0 -- "$found_version_file" | grep -Ei '^[+-].*version' || true >> "$outfile"
+        echo $(git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true) >> "$outfile"
     else
-        #git diff --unified=0 "$found_version_file" | grep -Ei '^[+-].*version' || true
-        git diff --unified=0 "$found_version_file" | grep -Ei 'version' >> "$outfile"
+        echo $(git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true) >> "$outfile"
     fi
     echo '```' >> "$outfile"
+    [[ $debug ]] && echo "$found_version_file" >> "$outfile"
   fi
 
   # include_pattern diffs
   if [[ -n "$include_pattern" ]]; then
     echo >> "$outfile"
-    echo "**Diffs for files matching '$include_pattern':**" >> "$outfile"
+    echo "### Changes in files (matching '$include_pattern')" >> "$outfile"
     echo '```diff' >> "$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+      git diff "${diff_spec[@]}" $default_diff_options -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
     else
-      git diff --unified=0 "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+      git diff $default_diff_options "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
     fi
     echo '```' >> "$outfile"
   fi
 
   # full diff stat
   echo >> "$outfile"
-  echo "**Full diff:**" >> "$outfile"
+  echo "### Changes in files" >> "$outfile"
   echo '```diff' >> "$outfile"
   if [[ -n "$exclude_pattern" ]]; then
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" --unified=0 --stat ":(exclude)*$exclude_pattern*" >> "$outfile"
+      git diff "${diff_spec[@]}" $default_diff_options ":(exclude)*$exclude_pattern*" >> "$outfile"
     else
-      git diff --unified=0 --stat ":(exclude)*$exclude_pattern*" >> "$outfile"
+      git diff $default_diff_options ":(exclude)*$exclude_pattern*" >> "$outfile"
     fi
   else
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" --unified=0 --stat >> "$outfile"
+      git diff "${diff_spec[@]}" $default_diff_options >> "$outfile"
     else
-      git diff --unified=0 --stat >> "$outfile"
+      git diff $default_diff_options >> "$outfile"
     fi
   fi
   echo '```' >> "$outfile"
@@ -358,31 +376,10 @@ if [[ -n "$config_file" ]]; then
         exit 1
     fi
 elif [[ -f .env ]]; then
-    #[[ $debug ]] && echo "Sourcing .env file..."
+    [[ $debug ]] && echo "Sourcing .env file..."
     source .env
 fi
 
-# Initialize default option values
-from_rev=""
-to_rev=""
-short_diff=false
-include_pattern=""
-exclude_pattern=""
-model="${CHANGEISH_MODEL:-qwen2.5-coder}"
-changelog_file="./CHANGELOG.md"
-prompt_template="./changelog_prompt.md"
-save_prompt=false
-save_history=false
-version_file=""
-all_history=false
-current_changes=false
-staged_changes=false
-outfile="history.md"
-show_releases=false
-remote=false
-api_url="${CHANGEISH_API_URL:-}"
-api_key="${CHANGEISH_API_KEY:-}"
-api_model="${CHANGEISH_API_MODEL:-}"
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -404,6 +401,7 @@ while [[ $# -gt 0 ]]; do
         --current) current_changes=true; shift ;;
         --staged) staged_changes=true; shift ;;
         --all) all_history=true; shift ;;
+        --debug) debug=true; shift ;;
         --update) update ;;
         --available-releases) show_available_releases ;;
         --help) show_help ;;
@@ -483,6 +481,20 @@ if ! $staged_changes && ! $all_history && [[ -z "$to_rev" && -z "$from_rev" ]]; 
     current_changes=true
 fi
 
+if [[ $debug ]]; then
+    echo "Debug mode enabled."
+    echo "Using model: $model"
+    echo "Remote mode: $remote"
+    echo "API URL: $api_url"
+    echo "API Model: $api_model"
+    echo "Changelog file: $changelog_file"
+    echo "Prompt template: $prompt_template"
+    echo "Version file: $found_version_file"
+    echo "All history: $all_history"
+    echo "Include pattern: $include_pattern"
+    echo "Exclude pattern: $exclude_pattern"
+fi
+
 # Handle uncommitted (working tree) changes
 if $current_changes; then
     build_entry "Working Tree" ""
@@ -498,7 +510,7 @@ else
     if [[ -z "$to_rev" ]]; then to_rev="HEAD"; fi
     if [[ -z "$from_rev" ]]; then from_rev="HEAD"; fi
     # Collect commits in chronological order (oldest first)
-    if $all_history && ! git rev-parse --verify "${to_rev}^" >/dev/null 2>&1; then
+    if $all_history; then
         range_spec="--all"
         echo "Using commit range: --all (all history)"
     else

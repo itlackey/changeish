@@ -13,7 +13,7 @@ CHANGEISH_SCRIPT="$SCRIPT_DIR/changes.sh"
 
 PASSED=0
 FAILED=0
-LOG_DIR="$SCRIPT_DIR/.test-logs"
+LOG_DIR="$SCRIPT_DIR/tests/.test-logs"
 mkdir -p "$LOG_DIR"
 
 # run_test: Helper to run a test function in a temporary git repo.
@@ -47,7 +47,7 @@ run_test() {
     cd "$ORIG_DIR"
     
     if [[ $result -eq 0 ]]; then
-        echo "✅ $name passed"
+        #echo "✅ $name passed"
         PASSED=$((PASSED+1))
     else
         echo "❌ $name failed"
@@ -143,6 +143,7 @@ fail_if_not_found() {
         return 1
     fi
 }
+
 # --- Test functions ---
 test_help() {
     local output
@@ -161,13 +162,17 @@ test_version() {
     fail_if_not_found "[0-9]\\+\.[0-9]\\+\.[0-9]\\+" version.txt "Version text not found"
 }
 
-test_env_loading() {
-    echo "x" > file.txt && git add file.txt && git commit -m "init"
-    echo "CHANGEISH_MODEL=MY_MODEL" > .env
-    mock_ollama "MY_MODEL" ""
-    "$CHANGEISH_SCRIPT" --current > out.txt 2>&1
-    fail_if_not_found "Running Ollama model 'MY_MODEL'" out.txt "Model config not loaded from .env"
+test_debug_flag() {
+    echo "a" > a.txt && git add a.txt && git commit -m "a"
+    "$CHANGEISH_SCRIPT" --debug --current > out.txt 2>&1
+    # Look for some debug output (adjust the pattern if needed)
+    grep -qi "Debug mode enabled" out.txt || grep -qi "Running Ollama model" out.txt || {
+        echo "❌ Debug output not found with --debug flag" >&2
+        cat out.txt
+        return 1
+    }
 }
+
 
 test_remote_changelog() {
     touch CHANGELOG.md && git add CHANGELOG.md && git commit -m "init"
@@ -340,9 +345,9 @@ test_history_format_uncommitted() {
         diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md
     fi
 
-    fail_if_not_found "Version changes in setup.py" history.md "Version number changes not found in history"
+    fail_if_not_found '\-\_\_version\_\_ = \"4.5.5\" +\_\_version\_\_ = \"4.5.6\"' history.md "Version number changes not found in history"
     fail_if_not_found "4.5.6" history.md "Version 4.5.6 not found in history"
-    fail_if_not_found "Diffs for files matching 'todos.md'" history.md "Diffs for todos.md not found in history"
+    fail_if_not_found "### Changes in files (matching 'todos.md')" history.md "Diffs for todos.md not found in history"
     fail_if_not_found "ENHANCEMENT: do cool stuff" history.md "Enhancement not found in todos.md diff"
     fail_if_not_found "DONE: setup.py version bump" history.md "Done task not found in todos.md diff"
     fail_if_not_found "ADDED: do cool stuff" history.md "Added task not found in todos.md diff"
@@ -391,20 +396,35 @@ test_meta_unknown_flag() {
     set -e
 }
 # --- Configuration loading ---
+test_env_loading() {
+    echo "x" > file.txt && git add file.txt && git commit -m "init"
+    echo "CHANGEISH_MODEL=MY_MODEL" > .env
+    mock_ollama "MY_MODEL" ""
+    "$CHANGEISH_SCRIPT" --current --debug > out.txt 2>err.txt
+    cat out.txt
+    cat err.txt
+    fail_if_not_found "Using model: MY_MODEL" out.txt "Model config not loaded from .env"
+}
 test_config_default() {
     rm -f .env my.env
-    "$CHANGEISH_SCRIPT" --version > out.txt 2>&1
+    "$CHANGEISH_SCRIPT" --version > out.txt 2>err.txt
+    cat out.txt
+    cat err.txt
     grep -q "qwen2.5-coder" out.txt || true # model default
 }
 test_config_env_override() {
     echo "CHANGEISH_MODEL=llama3" > .env
-    "$CHANGEISH_SCRIPT" --version > out.txt 2>&1
+    "$CHANGEISH_SCRIPT" --version > out.txt 2>err.txt
+    cat out.txt
+    cat err.txt
     grep -q "llama3" out.txt || true
 }
 test_config_file_override() {
     echo "CHANGEISH_MODEL=llama3" > .env
     echo "CHANGEISH_MODEL=phi3" > my.env
-    "$CHANGEISH_SCRIPT" --config-file my.env --version > out.txt 2>&1
+    "$CHANGEISH_SCRIPT" --config-file my.env --version > out.txt 2>err.txt
+    cat out.txt
+    cat err.txt    
     grep -q "phi3" out.txt || true
 }
 # --- MODE flags (mutually exclusive) ---
@@ -433,7 +453,7 @@ test_mode_staged() {
 }
 test_mode_all() {
     generate_commits
-    "$CHANGEISH_SCRIPT" --all --save-history
+    "$CHANGEISH_SCRIPT" --all --save-history --debug
     git rev-list --all
     cat history.md
     fail_if_not_found "**Commit\:**" history.md "No commits found in history"
@@ -479,9 +499,9 @@ test_include_pattern_only() {
     generate_commits
     echo "ADD" > TODO.md
     git add TODO.md && git commit -m "add TODO"
-    "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history
+    "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history --debug
     cat history.md
-    grep -q "Diffs for files matching" history.md
+    grep -q "diff --git a/TODO.md b/TODO.md" history.md
     grep -q "ADD" history.md
 }
 
@@ -489,8 +509,9 @@ test_exclude_pattern_only() {
     generate_commits
     echo "EXCLUDE" > TODO.md
     git add TODO.md && git commit -m "add TODO"
-    "$CHANGEISH_SCRIPT" --to HEAD --exclude-pattern TODO.md --save-history
-    ! grep -q "TODO.md" history.md  # Should not appear in full diff
+    "$CHANGEISH_SCRIPT" --all --exclude-pattern TODO.md --save-history --debug
+    cat history.md
+    ! grep -q "diff --git a/TODO.md b/TODO.md" history.md  # Should not appear in full diff
 }
 
 test_include_and_exclude() {
@@ -498,8 +519,11 @@ test_include_and_exclude() {
     echo "INCLUDE" > foo.md
     echo "EXCLUDE" > config.txt
     git add foo.md config.txt && git commit -m "add files"
-    "$CHANGEISH_SCRIPT" --include-pattern '*.md' --exclude-pattern 'config*' --save-history
-    grep -q "Diffs for files matching" history.md
+    
+    "$CHANGEISH_SCRIPT" --all --include-pattern '*.md' --exclude-pattern 'config*' \
+        --save-history --debug
+    cat history.md
+    grep -q "diff --git a/foo.md b/foo.md" history.md
     ! grep -q "config.txt" history.md
 }
 
@@ -545,16 +569,29 @@ test_version_auto_detect() {
     git add package.json && git commit -m "add package.json"
     echo '{"version": "1.0.1"}' > package.json
     git add package.json && git commit -m "bump version"
-    "$CHANGEISH_SCRIPT" --all --save-history
-    grep -q "Version changes in package.json" history.md
+    "$CHANGEISH_SCRIPT" --all --save-history --debug
+    cat history.md 
+    fail_if_not_found '### Version changes' history.md "Version changes section not found in history"
+    grep -Pzoq '### Version changes\n```diff\n-.*version.*\+.*version.*\n```' history.md
+    if [[ $? -ne 0 ]]; then
+        echo "❌ Version changes not found in history.md" >&2
+        return 1
+    fi
+    fail_if_not_found '### Version changes' history.md "Version changes section not found in history"
 }
 test_version_explicit_file() {
     echo 'version = "2.0.0"' > my.ver
     git add my.ver && git commit -m "add my.ver"
     echo 'version = "2.0.1"' > my.ver
     git add my.ver && git commit -m "bump version"
-    "$CHANGEISH_SCRIPT" --version-file my.ver --all --save-history
-    grep -q "Version changes in my.ver" history.md
+    "$CHANGEISH_SCRIPT" --version-file "my.ver" --all --save-history --debug
+    cat history.md
+    fail_if_not_found '### Version changes' history.md "Version changes section not found in history"
+    grep -Pzoq '### Version changes\n```diff\n-.*\+.*\n```' history.md
+    if [[ $? -ne 0 ]]; then
+        echo "❌ Version changes not found in history.md" >&2
+        return 1
+    fi
 }
 # --- INTEGRATION with Ollama (local) ---
 
@@ -722,7 +759,6 @@ set +e  # Allow all tests to run even if some fail.
 # Add run_test calls for each new test:
 run_test "Show help text" test_help
 run_test "Show version text" test_version
-run_test "Load .env file" test_env_loading
 run_test "Remote changelog generation" test_remote_changelog
 #Not Implemented: run_test "Update modes (prepend, append, update, auto)" test_update_modes
 
@@ -740,8 +776,10 @@ run_test "Meta: --version prints version" test_meta_version
 run_test "Meta: --available-releases prints tags" test_meta_available_releases
 run_test "Meta: --update calls installer" test_meta_update
 run_test "Meta: unknown flag aborts" test_meta_unknown_flag
+run_test "Meta: --debug enables debug output" test_debug_flag
 
 run_test "Config: default model" test_config_default
+run_test "Config: Load .env file" test_env_loading
 run_test "Config: .env overrides model" test_config_env_override
 run_test "Config: --config-file beats .env" test_config_file_override
 
