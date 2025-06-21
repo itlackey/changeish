@@ -128,80 +128,85 @@ show_version() {
     exit 0
 }
 
-# Write the git commit history and diffs (filtered) to a markdown file
+# -------------------------------------------------------------------
+# New helper: build a single history “entry” (commit, staged or current)
 # Globals:
-#   found_version_file (if set, path of file to check for version changes)
-#   include_pattern (if set, pattern to include for detailed diffs)
-#   exclude_pattern (if set, pattern to exclude from full diff)
+#   outfile            – path to Markdown history file
+#   found_version_file – path to version file, if any
+#   include_pattern    – pattern for “include” diffs
+#   exclude_pattern    – pattern for excluding files from full diff
 # Arguments:
-#   $1: Output file path for history
-#   $2: Git branch name
-#   $3: Starting commit
-#   $4: Ending commit
-#   $5: Start commit date
-#   $6: End commit date
-#   $@: List of commit hashes (should be passed after the first 6 arguments)
-write_git_history() {
-    local outfile="$1"
-    local branch="$2"
-    local start="$3"
-    local end="$4"
-    local start_date="$5"
-    local end_date="$6"
-    shift 6
-    local commits=("$@")
-    {
-        echo "# Git History"
-        echo
-        echo "**Branch:** $branch"
-        echo
-        echo "**Range:** from \`$start\` ($start_date) to \`$end\` ($end_date)"
-        echo
-        for commit in "${commits[@]}"; do
-            local name date message
-            name="$(git show -s --format=%s "$commit")"
-            date="$(git show -s --format=%ci "$commit")"
-            message="$(git show -s --format=%B "$commit")"
-            echo "## \`$commit\`"
-            echo
-            echo "**Commit:** $name"
-            echo
-            echo "**Date:** $date"
-            echo
-            echo "**Message:**"
-            echo '```'
-            printf '%s\n' "$message"
-            echo '```'
-            echo
-            # If a version file was found, show version number changes in that file for this commit
-            if [[ -n "$found_version_file" ]]; then
-                echo "**Version number changes in $found_version_file:**"
-                echo '```diff'
-                # Show lines with 'version' (added and removed) in the diff for the version file
-                git diff "$commit^!" --unified=0 -- "$found_version_file"| grep -Ei '^[+-].*version' || true
-                echo '```'
-                echo
-            fi
-            # If include_pattern is set, show added lines from diffs for matching files
-            if [[ -n "$include_pattern" ]]; then
-                echo "**Diffs for files matching '$include_pattern':**"
-                echo '```diff'
-                git diff "$commit^!" --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
-                echo '```'
-                echo
-            fi
-            # Always show a summary of all other changes (exclude pattern files from full diff if specified)
-            echo "**Full diff:**"
-            echo '```diff'
-            if [[ -n "$exclude_pattern" ]]; then
-                git diff "$commit^!" --unified=0 --stat ":(exclude)*$exclude_pattern*"
-            else
-                git diff "$commit^!" --unified=0 --stat
-            fi
-            echo '```'
-            echo
-        done
-    } > "$outfile"
+#   $1: label to display (hash or “Staged Changes” / “Working Tree”)
+#   $2: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
+build_entry() {
+    local label="$1"
+    local diff_spec
+    if [[ -n "$2" ]]; then
+        diff_spec=($2)
+    else
+        diff_spec=()
+    fi
+
+  echo "## $label" >> "$outfile"
+  # if this is a true commit (hash^!), show commit summary
+  if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
+    echo >> "$outfile"
+    echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" >> "$outfile"
+    echo >> "$outfile"
+    echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")" >> "$outfile"
+    echo >> "$outfile"
+    echo "**Message:**" >> "$outfile"
+    echo '```' >> "$outfile"
+    git show -s --format=%B "${diff_spec[@]}" >> "$outfile"
+    echo '```' >> "$outfile"
+  fi
+
+  # version‐file diff
+  if [[ -n "$found_version_file" ]]; then
+    echo >> "$outfile"
+    echo "**Version changes in $found_version_file:**" >> "$outfile"
+    echo '```diff' >> "$outfile"
+    if [[ ${#diff_spec[@]} -gt 0 ]]; then
+      git diff "${diff_spec[@]}" --unified=0 -- "$found_version_file" | grep -Ei '^[+-].*version' || true >> "$outfile"
+    else
+        #git diff --unified=0 "$found_version_file" | grep -Ei '^[+-].*version' || true
+        git diff --unified=0 "$found_version_file" | grep -Ei 'version' >> "$outfile"
+    fi
+    echo '```' >> "$outfile"
+  fi
+
+  # include_pattern diffs
+  if [[ -n "$include_pattern" ]]; then
+    echo >> "$outfile"
+    echo "**Diffs for files matching '$include_pattern':**" >> "$outfile"
+    echo '```diff' >> "$outfile"
+    if [[ ${#diff_spec[@]} -gt 0 ]]; then
+      git diff "${diff_spec[@]}" --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+    else
+      git diff --unified=0 "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+    fi
+    echo '```' >> "$outfile"
+  fi
+
+  # full diff stat
+  echo >> "$outfile"
+  echo "**Full diff:**" >> "$outfile"
+  echo '```diff' >> "$outfile"
+  if [[ -n "$exclude_pattern" ]]; then
+    if [[ ${#diff_spec[@]} -gt 0 ]]; then
+      git diff "${diff_spec[@]}" --unified=0 --stat ":(exclude)*$exclude_pattern*" >> "$outfile"
+    else
+      git diff --unified=0 --stat ":(exclude)*$exclude_pattern*" >> "$outfile"
+    fi
+  else
+    if [[ ${#diff_spec[@]} -gt 0 ]]; then
+      git diff "${diff_spec[@]}" --unified=0 --stat >> "$outfile"
+    else
+      git diff --unified=0 --stat >> "$outfile"
+    fi
+  fi
+  echo '```' >> "$outfile"
+  echo >> "$outfile"
 }
 
 # Generate the prompt file by combining the prompt template and git history
@@ -480,90 +485,25 @@ fi
 
 # Handle uncommitted (working tree) changes
 if $current_changes; then
-    {
-        echo ""
-        echo "# Git History"
-        echo "**Date:** $(date)"        
-        echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
-        echo "**Uncommitted changes**"
-        echo
-        if [[ -n "$found_version_file" ]]; then
-            echo "**Version number changes in $found_version_file:**"
-            echo '```diff'
-            git diff --unified=0 "$found_version_file" | grep -Ei '^[+-].*version' || true
-            echo '```'
-            echo
-        fi
-        echo "**Diff:**"
-        echo '```diff'
-        if [[ -n "$exclude_pattern" ]]; then
-            git diff --unified=0 --stat -- ":(exclude)*$exclude_pattern*"
-        else
-            git diff --unified=0 --stat
-        fi
-        echo '```'
-        echo
-        if [[ -n "$include_pattern" ]]; then
-            echo "**Diffs for files matching '$include_pattern':**"
-            echo '```diff'
-            git diff --unified=0 -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
-            echo '```'
-            echo
-        fi
-    } > "$outfile"
+    build_entry "Working Tree" ""
     echo "Generated git history for uncommitted changes in $outfile."
 
 # Handle staged (index) changes
 elif $staged_changes; then
-    {
-        echo ""
-        echo "# Git History (Staged Changes)"
-        echo
-        echo "**Branch:** $(git rev-parse --abbrev-ref HEAD)"
-        echo
-        echo "**Staged changes as of:** $(date)"
-        echo
-        if [[ -n "$found_version_file" ]]; then
-            echo "**Version number changes in $found_version_file:**"
-            echo '```diff'
-            git diff --unified=0 --cached "$found_version_file" | grep -Ei '^.*version.*[vV]?[0-9]+\.[0-9]+(\.[0-9]+)?' || true
-            echo '```'
-            echo
-        fi
-        echo "**Diff:**"
-        echo '```diff'
-        if [[ -n "$exclude_pattern" ]]; then
-            git diff --minimal --unified=0 --stat --cached -- ":(exclude)*$exclude_pattern*"
-        else
-            git diff --minimal --unified=0 --stat --cached
-        fi
-        echo '```'
-        echo
-        if [[ -n "$include_pattern" ]]; then
-            echo "**Diffs for files matching '$include_pattern':**"
-            echo '```diff'
-            git diff --minimal --unified=0 --cached -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true
-            echo '```'
-            echo
-        fi
-    } > "$outfile"
+    build_entry "Staged Changes" "--cached"
     echo "Generated git history for staged changes in $outfile."
 
 # Handle a specified commit range (including --all)
 else
-    # If --all was specified, set from_rev to HEAD and to_rev to earliest commit
-    if $all_history; then
-        to_rev="$(git rev-list --max-parents=0 HEAD | tail -n1)"
-        from_rev="HEAD"
-    fi
     if [[ -z "$to_rev" ]]; then to_rev="HEAD"; fi
     if [[ -z "$from_rev" ]]; then from_rev="HEAD"; fi
-    echo "Using commit range: ${to_rev}^..${from_rev}"
     # Collect commits in chronological order (oldest first)
     if $all_history && ! git rev-parse --verify "${to_rev}^" >/dev/null 2>&1; then
-        range_spec="${to_rev}..${from_rev}"
+        range_spec="--all"
+        echo "Using commit range: --all (all history)"
     else
         range_spec="${to_rev}^..${from_rev}"
+        echo "Using commit range: ${to_rev}^..${from_rev}"
     fi
     mapfile -t commits < <(git rev-list --reverse "$range_spec")
     if [[ ${#commits[@]} -eq 0 ]]; then
@@ -576,7 +516,10 @@ else
     end_date="$(git show -s --format=%ci "$end_commit")"
     total_commits=${#commits[@]}
     echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
-    write_git_history "$outfile" "$(git rev-parse --abbrev-ref HEAD)" "$start_commit" "$end_commit" "$start_date" "$end_date" "${commits[@]}"
+    
+    for commit in "${commits[@]}"; do
+      build_entry "$commit" "$commit^!"
+    done
     echo "Generated git history in $outfile."
 fi
 

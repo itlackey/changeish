@@ -137,7 +137,7 @@ fail_if_not_found() {
     local file="$2"
     local message="$3"
     # Note: The grep output is for debug; the actual check is the if statement.
-    echo "Grep: $(grep -q "$pattern" "$file")"
+    # echo "Grep: $(grep "$pattern" "$file")"
     if ! grep -q "$pattern" "$file"; then
         echo "❌ $message" >&2
         return 1
@@ -340,8 +340,8 @@ test_history_format_uncommitted() {
         diff -B -w -I '^\*\*Date:\*\*' "$SCRIPT_DIR/tests/uncommitted_history.md" history.md
     fi
 
-    fail_if_not_found "Version number changes in setup.py" history.md "Version number changes not found in history"
-    fail_if_not_found "4.5.6" history.md "Version [4.5.6] not found in history"
+    fail_if_not_found "Version changes in setup.py" history.md "Version number changes not found in history"
+    fail_if_not_found "4.5.6" history.md "Version 4.5.6 not found in history"
     fail_if_not_found "Diffs for files matching 'todos.md'" history.md "Diffs for todos.md not found in history"
     fail_if_not_found "ENHANCEMENT: do cool stuff" history.md "Enhancement not found in todos.md diff"
     fail_if_not_found "DONE: setup.py version bump" history.md "Done task not found in todos.md diff"
@@ -413,15 +413,17 @@ test_mode_default_current() {
     git add file.txt && git commit -m "init"
     echo "x" > file.txt
     "$CHANGEISH_SCRIPT" --save-history
-    grep -q "**Uncommitted changes**" history.md
+    grep -q "Working Tree" history.md
 }
+
 test_mode_explicit_current() {
     echo "x" > file.txt
     git add file.txt && git commit -m "init"
     echo "x" > file.txt
     "$CHANGEISH_SCRIPT" --current --save-history
-    grep -q "**Uncommitted changes**" history.md
+    grep -q "Working Tree" history.md
 }
+
 test_mode_staged() {
     echo "x" > file.txt
     git add file.txt && git commit -m "init"
@@ -432,7 +434,12 @@ test_mode_staged() {
 test_mode_all() {
     generate_commits
     "$CHANGEISH_SCRIPT" --all --save-history
-    grep -q "Range:" history.md
+    git rev-list --all
+    cat history.md
+    fail_if_not_found "**Commit\:**" history.md "No commits found in history"
+    fail_if_not_found ".*Commit.* a" history.md "Commit 'a' not found in history"
+    fail_if_not_found ".*Commit.* b" history.md "Commit 'b' not found in history"
+    fail_if_not_found ".*Commit.* c" history.md "Commit 'c' not found in history"
 }
 test_mode_from_to() {
     generate_commits
@@ -473,6 +480,7 @@ test_include_pattern_only() {
     echo "ADD" > TODO.md
     git add TODO.md && git commit -m "add TODO"
     "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history
+    cat history.md
     grep -q "Diffs for files matching" history.md
     grep -q "ADD" history.md
 }
@@ -538,7 +546,7 @@ test_version_auto_detect() {
     echo '{"version": "1.0.1"}' > package.json
     git add package.json && git commit -m "bump version"
     "$CHANGEISH_SCRIPT" --all --save-history
-    grep -q "Version number changes in package.json" history.md
+    grep -q "Version changes in package.json" history.md
 }
 test_version_explicit_file() {
     echo 'version = "2.0.0"' > my.ver
@@ -546,7 +554,7 @@ test_version_explicit_file() {
     echo 'version = "2.0.1"' > my.ver
     git add my.ver && git commit -m "bump version"
     "$CHANGEISH_SCRIPT" --version-file my.ver --all --save-history
-    grep -q "Version number changes in my.ver" history.md
+    grep -q "Version changes in my.ver" history.md
 }
 # --- INTEGRATION with Ollama (local) ---
 
@@ -554,7 +562,8 @@ test_ollama_missing() {
     # Remove ollama from PATH
     export PATH="/usr/bin:/bin"
     echo "a" > a.txt && git add a.txt && git commit -m "a"
-    "$CHANGEISH_SCRIPT" --current > out.txt 2>&1
+    "$CHANGEISH_SCRIPT" --current > out.txt 2>&1 || true
+    cat out.txt
     grep -q "ollama not found, skipping changelog generation." out.txt
 }
 
@@ -716,22 +725,26 @@ run_test "Show version text" test_version
 run_test "Load .env file" test_env_loading
 run_test "Remote changelog generation" test_remote_changelog
 #Not Implemented: run_test "Update modes (prepend, append, update, auto)" test_update_modes
+
+## Version detection tests
 run_test "Version detection (pyproject.toml)" test_version_detection_pyproject
 run_test "Version detection (pyproject.toml - staged)" test_version_detection_staged_pyproject
 run_test "Version detection (setup.py)" test_version_detection_setup_py
+run_test "Version: auto-detect version file" test_version_auto_detect
+run_test "Version: explicit version file" test_version_explicit_file
 
 ## History and prompt saving tests
-run_test "Save prompt and history files" test_save_prompt_and_history
-run_test "History: File format --current" test_history_format_uncommitted
 
 run_test "Meta: --help prints usage" test_meta_help
 run_test "Meta: --version prints version" test_meta_version
 run_test "Meta: --available-releases prints tags" test_meta_available_releases
 run_test "Meta: --update calls installer" test_meta_update
 run_test "Meta: unknown flag aborts" test_meta_unknown_flag
+
 run_test "Config: default model" test_config_default
 run_test "Config: .env overrides model" test_config_env_override
 run_test "Config: --config-file beats .env" test_config_file_override
+
 run_test "Mode: default current" test_mode_default_current
 run_test "Mode: explicit current" test_mode_explicit_current
 run_test "Mode: staged" test_mode_staged
@@ -739,16 +752,22 @@ run_test "Mode: all" test_mode_all
 run_test "Mode: from_to" test_mode_from_to
 run_test "Mode: from only" test_mode_from_only
 run_test "Mode: to only" test_mode_to_only
+
 run_test "Include pattern only" test_include_pattern_only
 run_test "Exclude pattern only" test_exclude_pattern_only
 run_test "Include and exclude patterns" test_include_and_exclude
+
+## Prompt and history saving and formatting tests
+run_test "History: File format --current" test_history_format_uncommitted
+
+run_test "Prompt: Save prompt and history files" test_save_prompt_and_history
 run_test "Output: --save-history keeps history file" test_output_save_history
 run_test "Output: --save-prompt keeps prompt file" test_output_save_prompt
 run_test "Output: both save flags" test_output_both_save_flags
 run_test "Output: custom changelog file" test_output_custom_changelog_file
 run_test "Output: custom prompt template" test_output_custom_prompt_template
-run_test "Version: auto-detect version file" test_version_auto_detect
-run_test "Version: explicit version file" test_version_explicit_file
+
+
 run_test "Remote: happy path" test_remote_happy_path
 run_test "Remote: missing API key" test_remote_missing_api_key
 run_test "Remote: missing API URL" test_remote_missing_api_url
