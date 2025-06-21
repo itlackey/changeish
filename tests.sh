@@ -24,6 +24,7 @@ mkdir -p "$LOG_DIR"
 run_test() {
     local name="$1"
     local fn="$2"
+    local do_git_init="${3:-true}"
     local TMP_REPO_DIR
     TMP_REPO_DIR="$(mktemp -d)"
     trap 'rm -rf "$TMP_REPO_DIR"' EXIT
@@ -33,7 +34,9 @@ run_test() {
     local LOGFILE="$LOG_DIR/${name// /_}.log"
     # Run the test in a temp git repo, sourcing this script for function definitions.
     cd "$TMP_REPO_DIR"
-    git init -q
+    if [[ "$do_git_init" != "false" ]]; then
+        git init -q
+    fi
     (
         mock_ollama "dummy" ""  # Mock ollama binary for tests
         # Sourcing the script with a guard so only function definitions are loaded.
@@ -531,7 +534,8 @@ EOF
 test_error_outside_git_repo() {
     # Should fail with a clear error if not in a git repo
     set +e
-    "$CHANGEISH_SCRIPT" --help > out.txt 2>err.txt
+    rm -rf .git 2>/dev/null || true
+    "$CHANGEISH_SCRIPT" > out.txt 2>err.txt
     local code=$?
     set -e
     if [[ $code -eq 0 ]]; then
@@ -545,16 +549,18 @@ test_error_outside_git_repo() {
 }
 
 test_error_no_commits() {
+    rm -rf .git 2>/dev/null || true
     git init -q
     set +e
     "$CHANGEISH_SCRIPT" --save-history > out.txt 2>err.txt
     local code=$?
+    cat err.txt
     set -e
     if [[ $code -eq 0 ]]; then
         echo "❌ Expected failure with no commits, but exited 0" >&2
         return 1
     fi
-    grep -qi "no commits" err.txt || grep -qi "fatal" err.txt || {
+    grep -qi "No commits found in repository. Nothing to show." err.txt || grep -qi "fatal" err.txt || {
         echo "❌ Error message for no commits not found" >&2
         return 1
     }
@@ -570,7 +576,7 @@ test_error_bad_config_file() {
         echo "❌ Expected failure with bad config file, but exited 0" >&2
         return 1
     fi
-    grep -qi "config file" err.txt || grep -qi "No such file" err.txt || {
+    grep -qi "Error: config file" err.txt || grep -qi "No such file" err.txt || {
         echo "❌ Error message for bad config file not found" >&2
         return 1
     }
@@ -586,6 +592,7 @@ test_error_bad_version_file() {
         echo "❌ Expected failure with bad version file, but exited 0" >&2
         return 1
     fi
+    cat err.txt
     grep -qi "version file" err.txt || grep -qi "No such file" err.txt || {
         echo "❌ Error message for bad version file not found" >&2
         return 1

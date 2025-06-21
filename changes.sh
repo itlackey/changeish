@@ -435,6 +435,9 @@ found_version_file=""
 if [[ -n "$version_file" ]]; then
     if [[ -f "$version_file" ]]; then
         found_version_file="$version_file"
+    else
+        echo "Error: Specified version file '$version_file' does not exist." >&2
+        exit 1
     fi
 else
     # Auto-detect: use first existing common version file
@@ -466,8 +469,8 @@ fi
 
 # Check for at least one commit before using HEAD
 if ! git rev-parse HEAD >/dev/null 2>&1; then
-    echo "No commits found in repository. Nothing to show."
-    exit 0
+    echo "No commits found in repository. Nothing to show." >&2
+    exit 1
 fi
 
 # If no specific range or mode is set, default to current uncommitted changes
