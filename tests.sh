@@ -68,10 +68,9 @@ generate_commits() {
 mock_ollama() {
     local model="$1"
     local content="$2"
-    ##echo "Running Ollama model '$model'..."
     mkdir -p bin
     echo '#!/bin/bash' > bin/ollama
-    echo 'echo "$content"' >> bin/ollama
+    echo 'echo '$content >> bin/ollama
     chmod +x bin/ollama
     export PATH="$PWD/bin:$PATH"
 }
@@ -377,16 +376,12 @@ test_mode_staged() {
     grep -q "Staged Changes" history.md
 }
 test_mode_all() {
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
-    echo "b" > b.txt && git add b.txt && git commit -m "b"
-    echo "c" > c.txt && git add c.txt && git commit -m "c"
+    generate_commits
     "$CHANGEISH_SCRIPT" --all --save-history
     grep -q "Range:" history.md
 }
 test_mode_from_to() {
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
-    echo "b" > b.txt && git add b.txt && git commit -m "b"
-    echo "c" > c.txt && git add c.txt && git commit -m "c"
+    generate_commits
     "$CHANGEISH_SCRIPT" --from "HEAD" --to "HEAD~1" --save-history > out.txt 2>&1
     total_commits=$(grep -c "**Commit:**" history.md)
     if [[ $total_commits -ne 2 ]]; then
@@ -398,9 +393,7 @@ test_mode_from_to() {
     grep -q "Using commit range: HEAD~1^..HEAD" out.txt
 }
 test_mode_from_only() {
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
-    echo "b" > b.txt && git add b.txt && git commit -m "b"
-    echo "c" > c.txt && git add c.txt && git commit -m "c"
+    generate_commits
     "$CHANGEISH_SCRIPT" --from HEAD~0 --save-history > out.txt 2>&1
     total_commits=$(grep -c "**Commit:**" history.md)
     if [[ $total_commits -ne 1 ]]; then
@@ -410,9 +403,7 @@ test_mode_from_only() {
     grep -q "Generating git history for 1 commit" out.txt
 }
 test_mode_to_only() {
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
-    echo "b" > b.txt && git add b.txt && git commit -m "b"
-    echo "c" > c.txt && git add c.txt && git commit -m "c"
+    generate_commits
     "$CHANGEISH_SCRIPT" --to HEAD~0 --save-history > out.txt 2>&1
     total_commits=$(grep -c "**Commit:**" history.md)
     if [[ $total_commits -ne 1 ]]; then
@@ -433,13 +424,15 @@ test_include_pattern_only() {
 }
 
 test_exclude_pattern_only() {
+    generate_commits
     echo "EXCLUDE" > TODO.md
     git add TODO.md && git commit -m "add TODO"
-    "$CHANGEISH_SCRIPT" --exclude-pattern TODO.md --save-history
+    "$CHANGEISH_SCRIPT" --to HEAD --exclude-pattern TODO.md --save-history
     ! grep -q "TODO.md" history.md  # Should not appear in full diff
 }
 
 test_include_and_exclude() {
+    generate_commits
     echo "INCLUDE" > foo.md
     echo "EXCLUDE" > config.txt
     git add foo.md config.txt && git commit -m "add files"
@@ -450,7 +443,8 @@ test_include_and_exclude() {
 
 # --- OUTPUT control ---
 test_output_save_history() {
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
+    generate_commits
+    echo "a" > a.txt 
     "$CHANGEISH_SCRIPT" --save-history
     [ -f history.md ]
     ! [ -f prompt.md ]
@@ -467,11 +461,15 @@ test_output_both_save_flags() {
     [ -f prompt.md ]
 }
 test_output_custom_changelog_file() {
+    generate_commits
     mkdir -p docs
     echo "# Changelog" > docs/CHANGELOG.md
-    echo "a" > a.txt && git add a.txt && git commit -m "a"
-    "$CHANGEISH_SCRIPT" --changelog-file docs/CHANGELOG.md
-    grep -q "Changelog" docs/CHANGELOG.md
+    echo "a" > a.txt && git add a.txt
+    mock_ollama "dummy" "Added a file"
+    "$CHANGEISH_SCRIPT" --changelog-file docs/CHANGELOG.md --save-history
+    cat docs/CHANGELOG.md
+    cat history.md
+    grep -q "Added a file" docs/CHANGELOG.md
 }
 test_output_custom_prompt_template() {
     echo "CUSTOM" > my_template.md
