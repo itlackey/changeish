@@ -128,10 +128,17 @@ update() {
     exit 0
 }
 
+# Print script version
+show_version() {
+    awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0"
+    exit 0
+}
+
 # Print usage information
 show_help() {
     # Print the usage and options from the top comments of this script
-    awk 'NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
+    echo "Version: $(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0")"
+    awk '/^set -euo pipefail/ {exit} NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
     echo "Default version files to check for version changes:"
     for file in "${default_version_files[@]}"; do
         echo "  $file"
@@ -142,12 +149,6 @@ show_help() {
 # Show all available release tags
 show_available_releases() {
     curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[].tag_name'
-    exit 0
-}
-
-# Print script version
-show_version() {
-    awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0"
     exit 0
 }
 
@@ -417,22 +418,6 @@ for ((i = 1; i <= $#; i++)); do
     fi
 done
 
-# Load configuration file if specified, otherwise source .env in current directory if present
-if [[ -n "$config_file" ]]; then
-    if [[ -f "$config_file" ]]; then
-        [[ $debug ]] && echo "Sourcing config file: $config_file"
-        # shellcheck disable=SC1090
-        source "$config_file"
-    else
-        echo "Error: config file '$config_file' not found." >&2
-        exit 1
-    fi
-elif [[ -f .env ]]; then
-    [[ $debug ]] && echo "Sourcing .env file..."
-    # shellcheck disable=SC1091
-    source .env
-fi
-
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -522,6 +507,22 @@ while [[ $# -gt 0 ]]; do
         ;;
     esac
 done
+
+# Load configuration file if specified, otherwise source .env in current directory if present
+if [[ -n "$config_file" ]]; then
+    if [[ -f "$config_file" ]]; then
+        [[ $debug ]] && echo "Sourcing config file: $config_file"
+        # shellcheck disable=SC1090
+        source "$config_file"
+    else
+        echo "Error: config file '$config_file' not found." >&2
+        exit 1
+    fi
+elif [[ -f .env ]]; then
+    [[ $debug ]] && echo "Sourcing .env file..."
+    # shellcheck disable=SC1091
+    source .env
+fi
 
 # If no remote model specified but remote flag is used, set defaults
 if $remote; then

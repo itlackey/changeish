@@ -71,12 +71,6 @@ EOF
   export PATH="$PWD/bin:$PATH"
 }
 
-@test "Show help text" {
-  run "$CHANGEISH_SCRIPT" --help
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Usage:"
-}
-
 @test "Show version text" {
   run "$CHANGEISH_SCRIPT" --version
   [ "$status" -eq 0 ]
@@ -107,11 +101,30 @@ EOF
 
 @test "Meta: --help prints usage" {
   run "$CHANGEISH_SCRIPT" --help
+  [ "$status" -eq 0 ]
+
+  # Ensure help content starts with Usage:
+  echo "$output" | head -n1 | grep -q "Version:"
+  [ "$(echo "$output" | head -n2 | tail -n1)" = "Usage: changeish [OPTIONS]" ]
+
   echo "$output" | grep -q -- "--help"
   echo "$output" | grep -q -- "--version"
   echo "$output" | grep -q -- "--remote"
   echo "$output" | grep -q -- "--api-url"
   echo "$output" | grep -q -- "--changelog-file"
+  echo "$output" | grep -q "Default version files to check for version changes:"
+  echo "$output" | grep -q "changes.sh"
+  echo "$output" | grep -q "package.json"
+  echo "$output" | grep -q "pyproject.toml"
+  echo "$output" | grep -q "setup.py"
+  echo "$output" | grep -q "Cargo.toml"
+  echo "$output" | grep -q "composer.json"
+  echo "$output" | grep -q "build.gradle"
+  echo "$output" | grep -q "pom.xml"
+
+  # Ensure help does not contain comments
+  echo "$output" | grep -qv "Sourcing .env file..."
+  echo "$output" | grep -qv "Initialize default option values"
 }
 
 @test "Meta: --version prints version" {
