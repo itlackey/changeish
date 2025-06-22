@@ -55,3 +55,4 @@
 - ADDED: Better git history formatted with more explict version and todo verbiage
 - ADDED: If no version changes are found, grep for existing/current verison info in the version file
 - DONE: Refactor the handling of --include/exclude so it handles the general diff and not the todos section
+- FIXED: Bug with pager displaying on long git diff output

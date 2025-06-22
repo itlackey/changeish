@@ -194,9 +194,9 @@ build_entry() {
             echo ""
             local version_diff=""
             if [[ ${#diff_spec[@]} -gt 0 ]]; then
-                version_diff="$(git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+                version_diff="$(git --no-pager diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
             else
-                version_diff="$(git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+                version_diff="$(git --no-pager diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
             fi
             if [[ -n "$version_diff" ]]; then
                 echo "### Version Changes"
@@ -216,14 +216,14 @@ build_entry() {
 
     [[ $debug ]] && echo "TODOs diff: ${todo_pattern}"
     if [[ $debug ]]; then
-        git diff --unified=0 -- "*todo*"
+        git --no-pager diff --unified=0 -- "*todo*"
     fi
     if [[ -n "$todo_pattern" ]]; then
         local todo_diff
         if [[ ${#diff_spec[@]} -gt 0 ]]; then
-            todo_diff="$(git diff "${diff_spec[@]}" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
+            todo_diff="$(git --no-pager diff "${diff_spec[@]}" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
         else
-            todo_diff="$(git diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
+            todo_diff="$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
         fi
         if [[ -n "$todo_diff" ]]; then
             {
@@ -268,9 +268,9 @@ build_entry() {
 
     echo '```diff' >>"$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-        git diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >>"$outfile"
+        git --no-pager diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >>"$outfile"
     else
-        git diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
+        git --no-pager diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
     fi
     echo '```' >>"$outfile"
 
