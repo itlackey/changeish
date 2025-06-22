@@ -22,6 +22,11 @@
    - Improved logic for determining commit ranges, especially when using `--all`.
 - Added support for including and excluding patterns in the diff.
 - Introduced a new feature to filter TODOs using regular expressions.
+- Updated the script to automatically detect common version files if none is specified.
+
+### Fixes
+
+- Fixed an issue where specifying a non-existent version file caused an error.
 
 ### Chores
 
