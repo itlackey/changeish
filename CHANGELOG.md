@@ -6,18 +6,19 @@
 
 - Added `--include-pattern` and `--exclude-pattern` arguments:
    - These replace the old `--short-diff` argument for more flexible diff pattern matching.
-
 - Implemented config file support via `--config-file`:
    - Allows loading settings from a .env file.
-
 - Changed temp file handling:
    - History and prompt files are now created using temporary files.
    - Files are saved only if the appropriate `--save-history` or `--save-prompt` arguments are provided.
-
 - Updated argument parsing:
    - Replaced `prompt_only` flag with `save_prompt`.
    - Added new flags for handling history and config file options.
-
+- Added `--generation-mode` option to control the model generation process.
+  - `none`: Skips changelog generation.
+  - `local`: Forces local model for generation.
+  - `remote`: Forces remote model for generation.
+  - `auto`: Attempts to use a local model, falls back to remote if not found.
 - Enhanced commit range handling:
    - Improved logic for determining commit ranges, especially when using `--all`.
 - Added support for including and excluding patterns in the diff.
@@ -27,6 +28,7 @@
 ### Fixes
 
 - Fixed an issue where specifying a non-existent version file caused an error.
+- Fixed issue where changelog file creation was skipped when the file did not exist.
 
 ### Chores
 

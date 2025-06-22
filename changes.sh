@@ -14,7 +14,7 @@
 #   --exclude-pattern P    Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
 #   --todo-pattern P       Pattern for files to check for TODO changes (default: *todo*)
 #   --model MODEL          Specify the local Ollama model to use (default: qwen2.5-coder)
-#   --remote               Use remote API for changelog generation instead of local model
+#   --generation-mode MODE  Control how changelog is generated: auto (default), local, remote, none
 #   --api-model MODEL      Specify remote API model (overrides --model for remote usage)
 #   --api-url URL          Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
@@ -38,7 +38,7 @@
 #   # Include all history since start and write to custom changelog file:
 #   changeish --all --changelog-file ./docs/CHANGELOG.md
 #   # Use a remote API for generation:
-#   changeish --remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
+#   changeish --generation-mode remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
 #   # Only generate the prompt file:
 #   changeish --save-prompt
 #   # Use a custom config file:
@@ -75,6 +75,7 @@ api_url="${CHANGEISH_API_URL:-}"
 api_key="${CHANGEISH_API_KEY:-}"
 api_model="${CHANGEISH_API_MODEL:-}"
 default_todo_grep_pattern="TODO|FIXME|ENHANCEMENT|DONE|CHORE"
+generation_mode="auto"
 
 # Define default prompt template (multi-line string) for AI generation
 default_prompt=$(
@@ -389,23 +390,24 @@ generate_changelog() {
 insert_changelog() {
     local changelog_file_path="$1"
     local new_content="$2"
-    if [[ -f "$changelog_file_path" ]]; then
-        local tmp_file changelog_tmp
-        tmp_file="$(mktemp)"
-        changelog_tmp="$(mktemp)"
-        printf '%s\n' "$new_content" >"$changelog_tmp"
-        if grep -q '^## ' "$changelog_file_path"; then
-            # Insert new content right after the first line (presumably the title or initial heading) and before existing entries
-            awk -v newfile="$changelog_tmp" 'NR==1 { print; print ""; while ((getline line < newfile) > 0) print line; close(newfile); next } /^## / { print; f=1; next } { if(f) print; else next }' "$changelog_file_path" >"$tmp_file" && mv "$tmp_file" "$changelog_file_path"
-        else
-            # If no second-level heading exists, just append the content
-            printf '\n%s\n' "$new_content" >>"$changelog_file_path"
-        fi
-        rm -f "$changelog_tmp"
-        echo "Inserted new changelog entry into '$changelog_file_path'."
-    else
-        echo "Changelog file '$changelog_file_path' not found. Skipping insertion." >&2
+    if [[ -z "$changelog_file_path" ]]; then
+        echo "# Changelog" >"$changelog_file_path"
+        echo "" >>"$changelog_file_path"
+        echo "Changelog file '$changelog_file_path' not found. Creating." >&2
     fi
+    local tmp_file changelog_tmp
+    tmp_file="$(mktemp)"
+    changelog_tmp="$(mktemp)"
+    printf '%s\n' "$new_content" >"$changelog_tmp"
+    if grep -q '^## ' "$changelog_file_path"; then
+        # Insert new content right after the first line (presumably the title or initial heading) and before existing entries
+        awk -v newfile="$changelog_tmp" 'NR==1 { print; print ""; while ((getline line < newfile) > 0) print line; close(newfile); next } /^## / { print; f=1; next } { if(f) print; else next }' "$changelog_file_path" >"$tmp_file" && mv "$tmp_file" "$changelog_file_path"
+    else
+        # If no second-level heading exists, just append the content
+        printf '\n%s\n' "$new_content" >>"$changelog_file_path"
+    fi
+    rm -f "$changelog_tmp"
+    [[ $debug ]] && echo "Inserted new changelog entry into '$changelog_file_path'."
 }
 
 config_file=""
@@ -444,10 +446,6 @@ while [[ $# -gt 0 ]]; do
     --model)
         model="$2"
         shift 2
-        ;;
-    --remote)
-        remote=true
-        shift
         ;;
     --api-model)
         api_model="$2"
@@ -501,6 +499,10 @@ while [[ $# -gt 0 ]]; do
     --available-releases) show_available_releases ;;
     --help) show_help ;;
     --version) show_version ;;
+    --generation-mode)
+        generation_mode="$2"
+        shift 2
+        ;;
     *)
         echo "Unknown arg: $1" >&2
         exit 1
@@ -522,27 +524,6 @@ elif [[ -f .env ]]; then
     [[ $debug ]] && echo "Sourcing .env file..."
     # shellcheck disable=SC1091
     source .env
-fi
-
-# If no remote model specified but remote flag is used, set defaults
-if $remote; then
-    if [[ -z "$api_model" ]]; then
-        api_model="$model"
-    fi
-    # Remote mode requires API key and URL
-    if [[ -z "$api_key" ]]; then
-        echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
-        exit 1
-    fi
-    if [[ -z "$api_url" ]]; then
-        echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
-        exit 1
-    fi
-fi
-
-# Apply environment variable overrides for model if not set via CLI
-if [[ -n "${CHANGEISH_MODEL:-}" && "$model" == "qwen2.5-coder" ]]; then
-    model="$CHANGEISH_MODEL"
 fi
 
 # Determine the file to track version changes
@@ -593,6 +574,64 @@ if ! $staged_changes && ! $all_history && [[ -z "$to_rev" && -z "$from_rev" ]]; 
     current_changes=true
 fi
 
+# Changelog generation logic
+should_generate_changelog=true
+case "$generation_mode" in
+none)
+    should_generate_changelog=false
+    ;;
+local)
+    remote=false
+    ;;
+remote)
+    remote=true
+    ;;
+auto)
+    # auto: try local, fallback to remote if ollama not found
+    if ! command -v ollama >/dev/null 2>&1; then
+        [[ $debug ]] && echo "ollama not found, falling back to remote API."
+        remote=true
+        # Remote mode requires API key and URL
+        if [[ -z "$api_key" ]]; then
+            echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
+            remote=false
+            should_generate_changelog=false
+        fi
+        if [[ -z "$api_url" ]]; then
+            echo "Warning: Falling back to remote but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+            remote=false
+            should_generate_changelog=false
+        fi
+    fi
+    ;;
+*)
+    echo "Unknown --generation-mode: $generation_mode" >&2
+    exit 1
+    ;;
+esac
+
+# If no remote model specified but remote flag is used, set defaults
+if $remote; then
+    if [[ -z "$api_model" ]]; then
+        api_model="$model"
+    fi
+    # Remote mode requires API key and URL
+    if [[ -z "$api_key" ]]; then
+        echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
+        exit 1
+    fi
+    if [[ -z "$api_url" ]]; then
+        echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+        exit 1
+    fi
+fi
+
+# Apply environment variable overrides for model if not set via CLI
+if [[ -n "${CHANGEISH_MODEL:-}" && "$model" == "qwen2.5-coder" ]]; then
+    model="$CHANGEISH_MODEL"
+fi
+
+# Debug output
 if [[ $debug ]]; then
     echo "Debug mode enabled."
     echo "Using model: $model"
@@ -656,7 +695,7 @@ fi
 # Create the prompt file from the git history
 generate_prompt "$outfile" "$prompt_template"
 
-if ! $save_prompt; then
+if ! $save_prompt && $should_generate_changelog; then
     generate_changelog "$model" "$changelog_file"
 fi
 
