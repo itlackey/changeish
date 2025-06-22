@@ -4,26 +4,29 @@
 # Usage: changeish [OPTIONS]
 #
 # Options:
-#   --help               Show this help message and exit
-#   --current            Use uncommitted (working tree) changes for git history
-#   --staged             Use staged (index) changes for git history
-#   --all                Include all history (from first commit to HEAD)
-#   --from REV           Set the starting commit (default: HEAD)
-#   --to REV             Set the ending commit (default: HEAD^)
-#   --include-pattern P  Show diffs for files matching pattern P (and exclude them from full diff)
-#   --exclude-pattern P  Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
-#   --model MODEL        Specify the local Ollama model to use (default: qwen2.5-coder)
-#   --remote             Use remote API for changelog generation instead of local model
-#   --api-model MODEL    Specify remote API model (overrides --model for remote usage)
-#   --api-url URL        Specify remote API endpoint URL for changelog generation
+#   --help                 Show this help message and exit
+#   --current              Use uncommitted (working tree) changes for git history
+#   --staged               Use staged (index) changes for git history
+#   --all                  Include all history (from first commit to HEAD)
+#   --from REV             Set the starting commit (default: HEAD)
+#   --to REV               Set the ending commit (default: HEAD^)
+#   --include-pattern P    Show diffs for files matching pattern P (and exclude them from full diff)
+#   --exclude-pattern P    Exclude files matching pattern P from full diff (default: same as include pattern if --include-pattern is used)
+#   --todo-pattern P       Pattern for files to check for TODO changes (default: *todo*)
+#   --model MODEL          Specify the local Ollama model to use (default: qwen2.5-coder)
+#   --remote               Use remote API for changelog generation instead of local model
+#   --api-model MODEL      Specify remote API model (overrides --model for remote usage)
+#   --api-url URL          Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
-#   --prompt-template PATH  Path to prompt template file (default: ./changelog_prompt.md)
-#   --save-prompt        Generate prompt file only and do not produce changelog (replaces --prompt-only)
-#   --save-history       Do not delete the intermediate git history file (save it as git_history.md in working directory)
-#   --version-file PATH  File to check for version number changes in each commit (default: auto-detect common files)
-#   --update             Update this script to the latest version and exit
-#   --available-releases Show available script releases and exit
-#   --version            Show script version and exit
+#   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
+#   --save-prompt          Generate prompt file only and do not produce changelog
+#   --save-history         Do not delete the intermediate git history file (save it as git_history.md in working directory)
+#   --version-file PATH    File to check for version number changes in each commit (default: auto-detect common files)
+#   --config-file PATH     Path to a shell config file to source before running (overrides .env)
+#   --update               Update this script to the latest version and exit
+#   --available-releases   Show available script releases and exit
+#   --debug                Enable debug output
+#   --version              Show script version and exit
 #
 # Example:
 #   # Update changelog with uncommitted changes using local model:
@@ -36,6 +39,10 @@
 #   changeish --all --changelog-file ./docs/CHANGELOG.md
 #   # Use a remote API for generation:
 #   changeish --remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
+#   # Only generate the prompt file:
+#   changeish --save-prompt
+#   # Use a custom config file:
+#   changeish --config-file ./myconfig.env
 #
 # Environment variables:
 #   CHANGEISH_MODEL       Default model to use for local generation (overridden by --model)
@@ -104,13 +111,6 @@ Version ordering: newest => oldest (descending).
 
 - Example enhancement A
 
-### Fixes
-
-- Example fix A
-
-### Chores
-
-- Example chore A
 <<<END>>>
 END_PROMPT
 )
