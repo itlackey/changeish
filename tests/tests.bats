@@ -88,7 +88,7 @@ EOF
 
 @test "Remote: happy path" {
   # Initialize CHANGELOG and a commit
-  touch CHANGELOG.md && git add CHANGELOG.md && git commit -m "init"
+  echo -e "# Changelog\n" CHANGELOG.md && git add CHANGELOG.md && git commit -m "init"
   echo "x" >file.txt
   git add file.txt && git commit -m "feat: add file"
   # Mock curl to return a specific message
@@ -96,6 +96,7 @@ EOF
   export CHANGEISH_API_KEY="dummy"
   run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake --api-model dummy
   [ "$status" -eq 0 ]
+  cat CHANGELOG.md >>$ERROR_LOG
   grep -q "Hello! How can I assist you today?" CHANGELOG.md
 }
 
@@ -621,4 +622,129 @@ EOF
   run "$CHANGEISH_SCRIPT" --generation-mode doesnotexist
   [ "$status" -ne 0 ]
   echo "$output" | grep -q "Unknown --generation-mode"
+}
+
+@test "Update-mode: prepend inserts before existing section" {
+  echo "# Changelog" >CHANGELOG.md
+  echo "## v1.0.0 (2025-01-01)" >>CHANGELOG.md
+  echo "- old entry" >>CHANGELOG.md
+
+  echo "feat: new prepended" >file.txt
+  git add CHANGELOG.md file.txt
+  git commit -m "init"
+
+  mock_ollama "dummy" "- feat: new prepended"
+  run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
+    --update-mode prepend --section-name "v1.0.0"
+  [ "$status" -eq 0 ]
+
+  # Expect new content above the v1.0.0 section
+  run grep -n "feat: new prepended" CHANGELOG.md
+  [[ "${lines[0]}" -lt "$(grep -n '## v1.0.0' CHANGELOG.md | cut -d: -f1)" ]]
+}
+
+@test "Update-mode: append adds after existing section" {
+  echo "# Changelog" >CHANGELOG.md
+  echo "## v2.0.0" >>CHANGELOG.md
+  echo "- initial" >>CHANGELOG.md
+  echo "## Older" >>CHANGELOG.md
+
+  echo "fix: appended" >file.txt
+  git add CHANGELOG.md file.txt
+  git commit -m "init"
+
+  mock_ollama "dummy" "- fix: appended"
+  run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
+    --update-mode append --section-name "v2.0.0"
+  [ "$status" -eq 0 ]
+
+  # Ensure appended content comes after the v2.0.0 section header
+  start=$(grep -n "## v2.0.0" CHANGELOG.md | cut -d: -f1)
+  pos=$(grep -n "fix: appended" CHANGELOG.md | cut -d: -f1)
+  [ "$pos" -gt "$start" ]
+  # And before next section header
+  next=$(grep -n "^## " CHANGELOG.md | sed -n '2p' | cut -d: -f1)
+  [ "$pos" -lt "$next" ]
+}
+
+@test "Update-mode: append at end if section missing" {
+  echo "# Log" >CHANGELOG.md
+  echo "## vX.Y.Z" >>CHANGELOG.md
+  echo "- entry" >>CHANGELOG.md
+
+  echo "chore: at end" >file.txt
+  git add CHANGELOG.md file.txt
+  git commit -m "init"
+
+  mock_ollama "dummy" "- chore: at end"
+  run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
+    --update-mode append --section-name "nope"
+
+  cat CHANGELOG.md >>$ERROR_LOG
+
+  [ "$status" -eq 0 ]
+  tail -n3 CHANGELOG.md | grep -q "chore: at end"
+  tail -n4 CHANGELOG.md | grep -q "## nope"
+}
+
+@test "Update-mode: auto updates when matching current version" {
+  echo "# Changelog" >CHANGELOG.md
+  echo "## v3.0.0" >>CHANGELOG.md
+  echo "- old" >>CHANGELOG.md
+
+  echo '__version__ = "3.0.0"' >setup.py
+  git add CHANGELOG.md setup.py
+  git commit -m "init"
+  echo "feat: added" >file.txt
+
+  mock_ollama "dummy" "- feat: added\n- updated AI"
+  run "$CHANGEISH_SCRIPT" \
+    --update-mode auto --save-history --save-prompt --debug
+  [ "$status" -eq 0 ]
+
+  # Expect updated section contents in CHANGELOG.md
+  cat history.md >>$ERROR_LOG
+  cat CHANGELOG.md >>$ERROR_LOG
+  grep -q "feat: added" CHANGELOG.md
+  grep -q "updated AI" CHANGELOG.md
+}
+
+@test "Update-mode: fallback auto inserts new section if missing" {
+  echo "# Log" >CHANGELOG.md
+  echo "## v9.9.9" >>CHANGELOG.md
+  echo "- entry" >>CHANGELOG.md
+
+  echo '__version__ = "1.2.3"' >setup.py
+  git add CHANGELOG.md setup.py
+  git commit -m "init"
+  #echo '__version__ = "1.2.4"' >setup.py
+  echo "feat: new version" >file.txt
+  git add file.txt
+
+  mock_ollama "dummy" "- feat: new version"
+  run "$CHANGEISH_SCRIPT" --generation-mode local \
+    --update-mode auto --save-history --save-prompt
+  [ "$status" -eq 0 ]
+  cat CHANGELOG.md >>$ERROR_LOG
+  # Check new "1.2.4" section exists and includes the new feat
+  grep -q "^## 1.2.3" CHANGELOG.md
+  grep -q "feat: new version" CHANGELOG.md
+}
+
+@test "Generate-mode remote still works with append mode" {
+  echo "# Changelog" >CHANGELOG.md
+  echo "## v4.0.0" >>CHANGELOG.md
+  echo "- prev" >>CHANGELOG.md
+
+  echo "fix: remote append" >file.txt
+  git add CHANGELOG.md file.txt
+  git commit -m "init"
+
+  mock_curl "dummy" "- fix: remote append"
+  export CHANGEISH_API_KEY="dummy"
+  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake \
+    --api-model dummy --update-mode append --section-name "v4.0.0"
+  [ "$status" -eq 0 ]
+  cat CHANGELOG.md >>$ERROR_LOG
+  tail -n3 CHANGELOG.md | grep -q "fix: remote append"
 }
