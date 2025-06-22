@@ -199,6 +199,17 @@ EOF
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "phi3" || true
 }
+@test "Template: Make prompt template writes default template" {
+  rm -f my_prompt_template.md
+  run "$CHANGEISH_SCRIPT" --make-prompt-template my_prompt_template.md
+  [ "$status" -eq 0 ]
+  [ -f my_prompt_template.md ]
+  grep -q '<<<INSTRUCTIONS>>>' my_prompt_template.md
+  grep -q 'Output rules' my_prompt_template.md
+  grep -q 'Example Output' my_prompt_template.md
+  grep -q '<<<END>>>' my_prompt_template.md
+  echo "$output" | grep -q "Default prompt template written to my_prompt_template.md."
+}
 
 @test "Mode: default current" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"

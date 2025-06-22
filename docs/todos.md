@@ -4,8 +4,6 @@
 
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
-- ENHANCEMENT: add option to create a prompt template based on the default
-- ENHANCEMENT: Add --generation-mode with allowed values of "auto", "local", "remote", and "none"
 - ENHANCEMENT: Add --update-mode with allowed values of "auto", "prepend", "append", and "update"
 - ENHANCEMENT: Add --section-name to specify which section to when updating the changelog.
   - If not specified it should be generated based on the new or current version information in that priority order. 
@@ -56,3 +54,5 @@
 - ADDED: If no version changes are found, grep for existing/current verison info in the version file
 - DONE: Refactor the handling of --include/exclude so it handles the general diff and not the todos section
 - FIXED: Bug with pager displaying on long git diff output
+- ADDED: Add --generation-mode with allowed values of "auto", "local", "remote", and "none"
+- ADDED: add option to create a prompt template based on the default

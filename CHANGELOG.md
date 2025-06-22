@@ -24,6 +24,7 @@
 - Added support for including and excluding patterns in the diff.
 - Introduced a new feature to filter TODOs using regular expressions.
 - Updated the script to automatically detect common version files if none is specified.
+- Added functionality to write the default prompt template to a file using the `--make-prompt-template` flag.
 
 ### Fixes
 

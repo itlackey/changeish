@@ -5,7 +5,7 @@
 #
 # Options:
 #   --help                 Show this help message and exit
-#   --current              Use uncommitted (working tree) changes for git history
+#   --current              Use uncommitted (working tree) changes for git history (default)
 #   --staged               Use staged (index) changes for git history
 #   --all                  Include all history (from first commit to HEAD)
 #   --from REV             Set the starting commit (default: HEAD)
@@ -18,6 +18,7 @@
 #   --api-model MODEL      Specify remote API model (overrides --model for remote usage)
 #   --api-url URL          Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH  Path to changelog file to update (default: ./CHANGELOG.md)
+#   --make-prompt-template PATH Write the default prompt template to a file
 #   --prompt-template PATH Path to prompt template file (default: ./changelog_prompt.md)
 #   --save-prompt          Generate prompt file only and do not produce changelog
 #   --save-history         Do not delete the intermediate git history file (save it as git_history.md in working directory)
@@ -43,6 +44,8 @@
 #   changeish --save-prompt
 #   # Use a custom config file:
 #   changeish --config-file ./myconfig.env
+#   # Write the default prompt template to a file:
+#   changeish --make-prompt-template my_prompt_template.md
 #
 # Environment variables:
 #   CHANGEISH_MODEL       Default model to use for local generation (overridden by --model)
@@ -503,12 +506,23 @@ while [[ $# -gt 0 ]]; do
         generation_mode="$2"
         shift 2
         ;;
+    --make-prompt-template)
+        make_prompt_template_path="$2"
+        shift 2
+        ;;
     *)
         echo "Unknown arg: $1" >&2
         exit 1
         ;;
     esac
 done
+
+# Handle --make-prompt-template if set
+if [[ -n "${make_prompt_template_path:-}" ]]; then
+    echo "$default_prompt" > "$make_prompt_template_path"
+    echo "Default prompt template written to $make_prompt_template_path."
+    exit 0
+fi
 
 # Load configuration file if specified, otherwise source .env in current directory if present
 if [[ -n "$config_file" ]]; then
