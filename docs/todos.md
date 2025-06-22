@@ -2,13 +2,9 @@
 
 ## Pending
 
-- ENHANCEMENT: If no version changes are found, grep for existing/current verison info in the version file
-- ENHANCEMENT: Add --todo-pattern to use in addition to the include/exclude args. The diffs found in this pattern should be used in the todos history section instead of the --include-pattern files
-- CHORE: Refactor the handling of --include/exclude so it handles the general diff and not the todos section
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ENHANCEMENT: add option to create a prompt template based on the default
-- ENHANCEMENT: Better git history formatted with more explict version and todo verbiage
 - ENHANCEMENT: Add --generation-mode with allowed values of "auto", "local", "remote", and "none"
 - ENHANCEMENT: Add --update-mode with allowed values of "auto", "prepend", "append", and "update"
 - ENHANCEMENT: Add --section-name to specify which section to when updating the changelog.
@@ -55,3 +51,7 @@
 - DONE: Cleanup default output file names (ie. prompt.md, history.md)
 - FIXED: Always generates changelog, should be able only generate prompts
 - ADDED: Add --debug arg to enable debug more
+- ADDED: Add --todo-pattern to use in addition to the include/exclude args. The diffs found in this pattern should be used in the todos history section instead of the --include-pattern files
+- ADDED: Better git history formatted with more explict version and todo verbiage
+- ADDED: If no version changes are found, grep for existing/current verison info in the version file
+- DONE: Refactor the handling of --include/exclude so it handles the general diff and not the todos section

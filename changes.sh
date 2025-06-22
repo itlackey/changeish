@@ -70,7 +70,8 @@ api_model="${CHANGEISH_API_MODEL:-}"
 default_todo_grep_pattern="TODO|FIXME|ENHANCEMENT|DONE|CHORE"
 
 # Define default prompt template (multi-line string) for AI generation
-default_prompt=$(cat <<'END_PROMPT'
+default_prompt=$(
+    cat <<'END_PROMPT'
 <<<INSTRUCTIONS>>>
 Task: Generate a changelog from the Git history that follows the structure below. Be sure to use only the information from the Git history in your response.
 Output rules
@@ -161,88 +162,120 @@ show_version() {
 #   $1: label to display (hash or “Staged Changes” / “Working Tree”)
 #   $2: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
 build_entry() {
-  local label="$1"
-  local diff_spec
-  if [[ -n "$2" ]]; then
-      diff_spec=($2)
-  else
-      diff_spec=()
-  fi
-  
-  echo "Building entry for: $label"
-  echo "## $label" >> "$outfile"
-
-  # if this is a true commit (hash^!), show commit summary
-  if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
-  {
-    echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")" 
-    echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")"
-    echo "**Message:**"
-    echo '```'
-    git show -s --format=%B "${diff_spec[@]}"
-    echo '```' 
-  }>> "$outfile"
-  fi
-
-  [[ $debug ]] && echo "Version diff: ${found_version_file}"
-  # version‐file diff
-  if [[ -n "$found_version_file" ]]; then
-    { 
-        echo ""
-        echo "### Version changes"
-        echo '```diff'
-        if [[ ${#diff_spec[@]} -gt 0 ]]; then
-            git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version'
-        else
-            git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version'
-        fi
-        echo '```'
-    } >> "$outfile"
-    [[ $debug ]] && echo "$found_version_file" >> "$outfile"
-  fi
-
-  [[ $debug ]] && echo "TODOs diff: ${todo_pattern}"
-  if [[ $debug ]]; then
-    git diff --unified=0 -- "*todo*"
-  fi
-  if [[ -n "$todo_pattern" ]]; then
-    echo >> "$outfile"
-    echo "### Changes in TODOs" >> "$outfile"
-    echo '```diff' >> "$outfile"
-    if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      echo -e "$(git diff "${diff_spec[@]}" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)" >> "$outfile"
-      #git diff "${diff_spec[@]}" $default_diff_options -- "*$todo_pattern*" | grep -E $default_todo_grep_pattern || true >> "$outfile"
-      #git diff "${diff_spec[@]}" $default_diff_options -- "*$include_pattern*" | grep '^+' | grep -v '^+++' || true >> "$outfile"
+    local label="$1"
+    local diff_spec
+    if [[ -n "$2" ]]; then
+        diff_spec=($2)
     else
-      echo -e "$(git diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)" >> "$outfile"
+        diff_spec=()
     fi
-    echo '```' >> "$outfile"
-  fi
 
-  # full diff stat
+    echo "Building entry for: $label"
+    echo "## $label" >>"$outfile"
+
+    # if this is a true commit (hash^!), show commit summary
+    if [[ "${diff_spec[*]:-}" =~ \^!$ ]]; then
+        {
+            echo "**Commit:** $(git show -s --format=%s "${diff_spec[@]}")"
+            echo "**Date:**   $(git show -s --format=%ci "${diff_spec[@]}")"
+            echo "**Message:**"
+            echo '```'
+            git show -s --format=%B "${diff_spec[@]}"
+            echo '```'
+        } >>"$outfile"
+    fi
+
+    [[ $debug ]] && echo "Version diff: ${found_version_file}"
+
+    # version‐file diff
+    if [[ -n "$found_version_file" ]]; then
+        {
+            echo ""
+            local version_diff=""
+            if [[ ${#diff_spec[@]} -gt 0 ]]; then
+                version_diff="$(git diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+            else
+                version_diff="$(git diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+            fi
+            if [[ -n "$version_diff" ]]; then
+                echo "### Version Changes"
+                echo '```diff'
+                echo "$version_diff"
+                echo '```'
+            else
+                # No diff, just show current version lines from the file
+                echo "### Latest Version"
+                echo '```diff'
+                grep -Ei 'version' "$found_version_file" || true
+                echo '```'
+            fi
+        } >>"$outfile"
+        [[ $debug ]] && echo "$found_version_file" >>"$outfile"
+    fi
+
+    [[ $debug ]] && echo "TODOs diff: ${todo_pattern}"
+    if [[ $debug ]]; then
+        git diff --unified=0 -- "*todo*"
+    fi
+    if [[ -n "$todo_pattern" ]]; then
+        local todo_diff
+        if [[ ${#diff_spec[@]} -gt 0 ]]; then
+            todo_diff="$(git diff "${diff_spec[@]}" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
+        else
+            todo_diff="$(git diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)"
+        fi
+        if [[ -n "$todo_diff" ]]; then
+            {
+                echo
+                echo "### Changes in TODOs"
+                echo '```diff'
+                echo -e "$todo_diff"
+                echo '```'
+            } >>"$outfile"
+        fi
+    fi
+
+    # Validate include/exclude patterns (must be valid git pathspecs)
+    if [[ -n "$include_pattern" ]]; then
+        if ! git ls-files -- "*$include_pattern*" >/dev/null 2>&1; then
+            echo "Error: Invalid --include-pattern '$include_pattern' (no matching files or invalid pattern)." >&2
+            exit 1
+        fi
+    fi
+    if [[ -n "$exclude_pattern" ]]; then
+        if ! git ls-files -- ":(exclude)*$exclude_pattern*" >/dev/null 2>&1; then
+            echo "Error: Invalid --exclude-pattern '$exclude_pattern' (no matching files or invalid pattern)." >&2
+            exit 1
+        fi
+    fi
+
+    # full diff stat
     [[ $debug ]] && echo "Include pattern: $include_pattern"
     [[ $debug ]] && echo "Exclude pattern: $exclude_pattern"
-    echo >> "$outfile"
-    echo "### Changes in files" >> "$outfile"
+
+    echo >>"$outfile"
+    echo "### Changes in files" >>"$outfile"
     # Prepare the diff arguments based on include/exclude patterns
     diff_args=()
     if [[ -n "$include_pattern" ]]; then
-      diff_args+=("*$include_pattern*")
+        diff_args+=("*$include_pattern*")
     fi
     if [[ -n "$exclude_pattern" ]]; then
-      diff_args+=(":(exclude)*$exclude_pattern*")
+        diff_args+=(":(exclude)*$exclude_pattern*")
     fi
     [[ $debug ]] && echo "Full diff: ${diff_args:-""}"
 
-    echo '```diff' >> "$outfile"
+    echo '```diff' >>"$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
-      git diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >> "$outfile"
+        git diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >>"$outfile"
     else
-      git diff $default_diff_options -- "${diff_args[@]}" >> "$outfile"
+        git diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
     fi
-    echo '```' >> "$outfile"
+    echo '```' >>"$outfile"
 
-  echo >> "$outfile"
+    echo >>"$outfile"
+
+    [[ $debug ]] && echo "History output:" && cat "$outfile" >&2
 }
 
 # Generate the prompt file by combining the prompt template and git history
@@ -265,9 +298,9 @@ generate_prompt() {
     # Compose the final prompt by inserting markers and the git history content
     local complete_prompt
     complete_prompt="${prompt_text}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
-    echo -e "$complete_prompt" > "$prompt_file"
+    echo -e "$complete_prompt" >"$prompt_file"
 
-    [[ $debug ]] && echo "Generated prompt content in $prompt_file"    
+    [[ $debug ]] && echo "Generated prompt content in $prompt_file"
 }
 
 # Run the local Ollama model with the prompt file
@@ -278,9 +311,9 @@ run_ollama() {
     local model="$1"
     local prompt_file_path="$2"
     if [[ $debug ]]; then
-        ollama run "$model" < "$prompt_file_path" --verbose
+        ollama run "$model" --verbose <"$prompt_file_path"
     else
-        ollama run "$model" < "$prompt_file_path"
+        ollama run "$model" <"$prompt_file_path"
     fi
 }
 
@@ -296,9 +329,10 @@ generate_remote() {
     response=$(curl -s -X POST "$api_url" \
         -H "Authorization: Bearer $api_key" \
         -H "Content-Type: application/json" \
-        -d "$(jq -n --arg model "$model" --arg content "$message" \
-              '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}' \
-            )")
+        -d "$(
+            jq -n --arg model "$model" --arg content "$message" \
+                '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}'
+        )")
 
     result=$(echo "$response" | jq -r '.choices[-1].message.content')
     if [[ $debug ]]; then
@@ -358,13 +392,13 @@ insert_changelog() {
         local tmp_file changelog_tmp
         tmp_file="$(mktemp)"
         changelog_tmp="$(mktemp)"
-        printf '%s\n' "$new_content" > "$changelog_tmp"
+        printf '%s\n' "$new_content" >"$changelog_tmp"
         if grep -q '^## ' "$changelog_file_path"; then
             # Insert new content right after the first line (presumably the title or initial heading) and before existing entries
-            awk -v newfile="$changelog_tmp" 'NR==1 { print; print ""; while ((getline line < newfile) > 0) print line; close(newfile); next } /^## / { print; f=1; next } { if(f) print; else next }' "$changelog_file_path" > "$tmp_file" && mv "$tmp_file" "$changelog_file_path"
+            awk -v newfile="$changelog_tmp" 'NR==1 { print; print ""; while ((getline line < newfile) > 0) print line; close(newfile); next } /^## / { print; f=1; next } { if(f) print; else next }' "$changelog_file_path" >"$tmp_file" && mv "$tmp_file" "$changelog_file_path"
         else
             # If no second-level heading exists, just append the content
-            printf '\n%s\n' "$new_content" >> "$changelog_file_path"
+            printf '\n%s\n' "$new_content" >>"$changelog_file_path"
         fi
         rm -f "$changelog_tmp"
         echo "Inserted new changelog entry into '$changelog_file_path'."
@@ -375,19 +409,18 @@ insert_changelog() {
 
 config_file=""
 # Parse --config-file argument if specified
-for ((i=1; i<=$#; i++)); do
-  if [[ "${!i}" == "--config-file" ]]; then
-    next=$((i+1))
-    config_file="${!next}"
-    break
-  fi
+for ((i = 1; i <= $#; i++)); do
+    if [[ "${!i}" == "--config-file" ]]; then
+        next=$((i + 1))
+        config_file="${!next}"
+        break
+    fi
 done
-
 
 # Load configuration file if specified, otherwise source .env in current directory if present
 if [[ -n "$config_file" ]]; then
     if [[ -f "$config_file" ]]; then
-        [[ $debug ]] && echo "Sourcing config file: $config_file"             
+        [[ $debug ]] && echo "Sourcing config file: $config_file"
         # shellcheck disable=SC1090
         source "$config_file"
     else
@@ -400,33 +433,93 @@ elif [[ -f .env ]]; then
     source .env
 fi
 
-
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --from) from_rev="$2"; shift 2 ;;
-        --to) to_rev="$2"; shift 2 ;;
-        --include-pattern) include_pattern="$2"; shift 2 ;;
-        --exclude-pattern) exclude_pattern="$2"; shift 2 ;;
-        --model) model="$2"; shift 2 ;;
-        --remote) remote=true; shift ;;
-        --api-model) api_model="$2"; shift 2 ;;
-        --api-url) api_url="$2"; shift 2 ;;
-        --config-file) config_file="$2"; shift 2 ;;
-        --changelog-file) changelog_file="$2"; shift 2 ;;
-        --prompt-template) prompt_template="$2"; shift 2 ;;
-        --save-prompt) save_prompt=true; shift ;;
-        --save-history) save_history=true; shift ;;
-        --version-file) version_file="$2"; shift 2 ;;
-        --current) current_changes=true; shift ;;
-        --staged) staged_changes=true; shift ;;
-        --all) all_history=true; shift ;;
-        --debug) debug=true; shift ;;
-        --update) update ;;
-        --available-releases) show_available_releases ;;
-        --help) show_help ;;
-        --version) show_version ;;
-        *) echo "Unknown arg: $1" >&2; exit 1 ;;
+    --from)
+        from_rev="$2"
+        shift 2
+        ;;
+    --to)
+        to_rev="$2"
+        shift 2
+        ;;
+    --include-pattern)
+        include_pattern="$2"
+        shift 2
+        ;;
+    --exclude-pattern)
+        exclude_pattern="$2"
+        shift 2
+        ;;
+    --todo-pattern)
+        todo_pattern="$2"
+        shift 2
+        ;;
+    --model)
+        model="$2"
+        shift 2
+        ;;
+    --remote)
+        remote=true
+        shift
+        ;;
+    --api-model)
+        api_model="$2"
+        shift 2
+        ;;
+    --api-url)
+        api_url="$2"
+        shift 2
+        ;;
+    --config-file)
+        config_file="$2"
+        shift 2
+        ;;
+    --changelog-file)
+        changelog_file="$2"
+        shift 2
+        ;;
+    --prompt-template)
+        prompt_template="$2"
+        shift 2
+        ;;
+    --save-prompt)
+        save_prompt=true
+        shift
+        ;;
+    --save-history)
+        save_history=true
+        shift
+        ;;
+    --version-file)
+        version_file="$2"
+        shift 2
+        ;;
+    --current)
+        current_changes=true
+        shift
+        ;;
+    --staged)
+        staged_changes=true
+        shift
+        ;;
+    --all)
+        all_history=true
+        shift
+        ;;
+    --debug)
+        debug=true
+        shift
+        ;;
+    --update) update ;;
+    --available-releases) show_available_releases ;;
+    --help) show_help ;;
+    --version) show_version ;;
+    *)
+        echo "Unknown arg: $1" >&2
+        exit 1
+        ;;
     esac
 done
 
@@ -445,8 +538,6 @@ if $remote; then
         exit 1
     fi
 fi
-
-
 
 # Apply environment variable overrides for model if not set via CLI
 if [[ -n "${CHANGEISH_MODEL:-}" && "$model" == "qwen2.5-coder" ]]; then
@@ -554,9 +645,9 @@ else
     end_date="$(git show -s --format=%ci "$end_commit")"
     total_commits=${#commits[@]}
     echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
-    
+
     for commit in "${commits[@]}"; do
-      build_entry "$commit" "$commit^!"
+        build_entry "$commit" "$commit^!"
     done
     echo "Generated git history in $outfile."
 fi

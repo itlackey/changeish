@@ -4,3 +4,4 @@ prompt.md
 .env
 history.md
 .test-logs
+tests/.logs
