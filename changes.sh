@@ -174,7 +174,7 @@ build_entry() {
     local label="$1"
     local diff_spec
     if [[ -n "$2" ]]; then
-        diff_spec=($2)
+        diff_spec=("$2")
     else
         diff_spec=()
     fi
@@ -202,8 +202,10 @@ build_entry() {
             echo ""
             local version_diff=""
             if [[ ${#diff_spec[@]} -gt 0 ]]; then
+                # shellcheck disable=SC2086
                 version_diff="$(git --no-pager diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
             else
+                # shellcheck disable=SC2086
                 version_diff="$(git --no-pager diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
             fi
             if [[ -n "$version_diff" ]]; then
@@ -276,8 +278,10 @@ build_entry() {
 
     echo '```diff' >>"$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
+        # shellcheck disable=SC2086
         git --no-pager diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >>"$outfile"
     else
+        # shellcheck disable=SC2086
         git --no-pager diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
     fi
     echo '```' >>"$outfile"
