@@ -58,7 +58,7 @@
 set -euo pipefail
 
 # Initialize default option values
-debug=false #BUG: should be set to null by default
+debug="false"
 from_rev=""
 to_rev=""
 default_diff_options="--patience --unified=0 --no-color -b -w --compact-summary --color-moved=no"
@@ -194,7 +194,7 @@ build_entry() {
         } >>"$outfile"
     fi
 
-    [[ $debug ]] && echo "Version diff: ${found_version_file}"
+    #[[ "$debug" == true ]] && echo "Version diff: ${found_version_file}"
 
     # version‐file diff
     if [[ -n "$found_version_file" ]]; then
@@ -219,11 +219,11 @@ build_entry() {
                 echo '```'
             fi
         } >>"$outfile"
-        [[ $debug ]] && echo "$found_version_file" >>"$outfile"
+        #[[ "$debug" == false ]] && echo "$found_version_file" >>"$outfile"
     fi
 
-    [[ $debug ]] && echo "TODOs diff: ${todo_pattern}"
-    if [[ $debug ]]; then
+   # [[ "$debug" == false ]] && echo "TODOs diff: ${todo_pattern}"
+    if [[ "$debug" == true ]]; then
         git --no-pager diff --unified=0 -- "*todo*"
     fi
     if [[ -n "$todo_pattern" ]]; then
@@ -259,8 +259,8 @@ build_entry() {
     fi
 
     # full diff stat
-    [[ $debug ]] && echo "Include pattern: $include_pattern"
-    [[ $debug ]] && echo "Exclude pattern: $exclude_pattern"
+    # [[ "$debug" == false ]] && echo "Include pattern: $include_pattern"
+    # [[ "$debug" == false ]] && echo "Exclude pattern: $exclude_pattern"
 
     echo >>"$outfile"
     echo "### Changes in files" >>"$outfile"
@@ -272,7 +272,7 @@ build_entry() {
     if [[ -n "$exclude_pattern" ]]; then
         diff_args+=(":(exclude)*$exclude_pattern*")
     fi
-    [[ $debug ]] && echo "Full diff: ${diff_args:-""}"
+    # [[ $debug ]] && echo "Full diff: ${diff_args:-""}"
 
     echo '```diff' >>"$outfile"
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
@@ -284,7 +284,9 @@ build_entry() {
 
     echo >>"$outfile"
 
-    [[ $debug ]] && echo "History output:" && cat "$outfile" >&2
+    if [[ "$debug" == "true" ]]; then
+        echo "History output:" && cat "$outfile"
+    fi
 }
 
 # Generate the prompt file by combining the prompt template and git history
@@ -311,7 +313,7 @@ generate_prompt() {
     complete_prompt="${complete_prompt}\\n<<<EXISTING CHANGELOG>>>\\n$existing_section\\n<<<END>>>"
     echo -e "$complete_prompt" >"$prompt_file"
 
-    [[ $debug ]] && echo "Generated prompt content in $prompt_file"
+    #[[ $debug ]] && echo "Generated prompt content in $prompt_file"
 }
 
 # Run the local Ollama model with the prompt file
@@ -321,7 +323,7 @@ generate_prompt() {
 run_ollama() {
     local model="$1"
     local prompt_file_path="$2"
-    if [[ $debug ]]; then
+    if [[ "$debug" == "true" ]]; then
         ollama run "$model" --verbose <"$prompt_file_path"
     else
         ollama run "$model" <"$prompt_file_path"
@@ -346,7 +348,7 @@ generate_remote() {
         )")
 
     result=$(echo "$response" | jq -r '.choices[-1].message.content')
-    if [[ $debug ]]; then
+    if [[ "$debug" == "true" ]]; then
         echo "Response from remote API:" >&2
         echo "$response" | jq . >&2
     fi
@@ -459,7 +461,7 @@ insert_changelog() {
             echo "End line for section '$section_name': $end_line"
             echo "Appending $content"
             # Insert $content after the end_line in $file
-            awk -v end="$end_line" -v content="$content" 'NR==end{print content;print; next}1' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+            awk -v end="$end_line" -v content="$content" 'NR==end{print content;print; next}1' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
         esac
     else
@@ -486,10 +488,10 @@ insert_changelog() {
                         next
                     }
                     { print }
-                ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+                ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             else
                 # No H1 found, insert at top
-                echo "## $version"  >> "$file"
+                echo "## $version" >>"$file"
                 echo "$content" >>"$file"
             fi
             ;;
@@ -691,7 +693,7 @@ fi
 # Load configuration file if specified, otherwise source .env in current directory if present
 if [[ -n "$config_file" ]]; then
     if [[ -f "$config_file" ]]; then
-        [[ $debug ]] && echo "Sourcing config file: $config_file"
+       # [[ "$debug" == true ]] && echo "Sourcing config file: $config_file"
         # shellcheck disable=SC1090
         source "$config_file"
     else
@@ -699,7 +701,7 @@ if [[ -n "$config_file" ]]; then
         exit 1
     fi
 elif [[ -f .env ]]; then
-    [[ $debug ]] && echo "Sourcing .env file..."
+   # [[ $debug ]] && echo "Sourcing .env file..."
     # shellcheck disable=SC1091
     source .env
 fi
@@ -784,7 +786,9 @@ remote)
 auto)
     # auto: try local, fallback to remote if ollama not found
     if ! command -v ollama >/dev/null 2>&1; then
-        [[ $debug ]] && echo "ollama not found, falling back to remote API."
+        if [[ "$debug" == true ]]; then
+            echo "ollama not found, falling back to remote API."
+        fi
         remote=true
         # Remote mode requires API key and URL
         if [[ -z "$api_key" ]]; then
@@ -832,7 +836,7 @@ if [[ -n "${CHANGEISH_MODEL:-}" && "$model" == "qwen2.5-coder" ]]; then
 fi
 
 # Debug output
-if [[ $debug ]]; then
+if [[ "$debug" == true ]]; then
     echo "## Settings"
     echo "Debug mode enabled."
     echo "Using model: $model"
@@ -898,8 +902,10 @@ else
 fi
 
 # Create the prompt file from the git history
-[[ $debug ]] && echo "Existing changelog section for '$section_name':"
-[[ $debug ]] && echo "$existing_changelog_section"
+if [[ "$debug" == "true" ]]; then
+    echo "Existing changelog section for '$section_name':"
+    echo "$existing_changelog_section"
+fi
 generate_prompt "$outfile" "$prompt_template" "$existing_changelog_section"
 
 if $should_generate_changelog; then
@@ -911,7 +917,7 @@ if $should_generate_changelog; then
     echo "Generating changelog using model: $model"
     generate_changelog "$model" "$changelog_file"
 else
-    echo "Changelog generation skipped. Use --generation-mode to enable it." >&2
+    echo "Changelog generation skipped. Use --generation-mode to enable it."
 fi
 
 # Cleanup: remove temp files if not saving them

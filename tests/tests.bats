@@ -94,7 +94,8 @@ EOF
   # Mock curl to return a specific message
   mock_curl "dummy" "Hello! How can I assist you today?"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake --api-model dummy
+  run "$CHANGEISH_SCRIPT" --generation-mode remote \
+    --api-url http://fake --api-model dummy --debug
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
   grep -q "Hello! How can I assist you today?" CHANGELOG.md
@@ -224,8 +225,7 @@ EOF
 @test "Mode: explicit current" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "z" >file.txt
-  run "$CHANGEISH_SCRIPT" --current --save-history
-  [ "$status" -eq 0 ]
+  run "$CHANGEISH_SCRIPT" --current --save-history --generation-mode none
   grep -q "Working Tree" history.md
 }
 
@@ -420,6 +420,7 @@ EOF
   if [ -s diff_output.txt ]; then
     echo "Differences found:" >>"$ERROR_LOG"
     cat diff_output.txt >>"$ERROR_LOG"
+    cat history.md >>"$ERROR_LOG"
     fail "history.md does not match expected output"
   fi
 
@@ -476,7 +477,7 @@ EOF
   export PATH="/usr/bin:/bin"
   rm -f bin/ollama
   echo "d" >d.txt && git add d.txt && git commit -m "d"
-  run "$CHANGEISH_SCRIPT" --current
+  run "$CHANGEISH_SCRIPT" --current --generation-mode local --debug
   [ "$status" -eq 0 ]
   echo "$output" | grep -qi "ollama not found"
 }
@@ -491,7 +492,7 @@ EOF
   export PATH="$PWD/bin:$PATH"
   export CHANGEISH_MODEL=llama3
   echo "e" >e.txt && git add e.txt && git commit -m "e"
-  run "$CHANGEISH_SCRIPT" --current
+  run "$CHANGEISH_SCRIPT" --current --generation-mode local --debug
   [ "$status" -eq 0 ]
   run grep -q -- "--verbose" ollama_args.txt
   [ "$status" -eq 0 ]

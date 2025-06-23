@@ -7,8 +7,26 @@
         {
             "type": "bashdb",
             "request": "launch",
+            "name": "bats",
+            "cwd": "${workspaceFolder}",
+            "program": "/usr/bin/bats",
+            "args": [
+                "${file}"
+            ]
+        },
+        {
+            "type": "bashdb",
+            "request": "launch",
             "name": "Bash-Debug (simplest configuration)",
-            "program": "${file}"
+            "program": "${file}",
+            "args": [
+                "--current",
+                "--save-history",
+                "--generation-mode",
+                "none",
+                "--config-file",
+                ".env"
+            ]
         }
     ]
 }
