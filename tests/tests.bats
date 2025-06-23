@@ -215,8 +215,9 @@ EOF
 @test "Mode: default current" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "y" >file.txt
-  run "$CHANGEISH_SCRIPT" --save-history
+  run "$CHANGEISH_SCRIPT" --save-history --debug
   [ "$status" -eq 0 ]
+  cat history.md >>$ERROR_LOG
   grep -q "Working Tree" history.md
 }
 
@@ -253,7 +254,7 @@ EOF
 
 @test "Mode: from_to" {
   generate_commits
-  run "$CHANGEISH_SCRIPT" --from HEAD --to HEAD~1 --save-history
+  run "$CHANGEISH_SCRIPT" --from HEAD --to HEAD~1 --save-history --debug
   [ "$status" -eq 0 ]
   total=$(grep -c "**Commit**" history.md)
   [ "$total" -eq 2 ]
@@ -262,7 +263,7 @@ EOF
 
 @test "Mode: from only" {
   generate_commits
-  run "$CHANGEISH_SCRIPT" --from HEAD~0 --save-history
+  run "$CHANGEISH_SCRIPT" --from HEAD~0 --save-history --debug
   [ "$status" -eq 0 ]
   total=$(grep -c "**Commit**" history.md)
   [ "$total" -eq 1 ]
@@ -271,7 +272,7 @@ EOF
 
 @test "Mode: to only" {
   generate_commits
-  run "$CHANGEISH_SCRIPT" --to HEAD~0 --save-history
+  run "$CHANGEISH_SCRIPT" --to HEAD~0 --save-history --debug
   [ "$status" -eq 0 ]
   total=$(grep -c "**Commit**" history.md)
   [ "$total" -eq 1 ]
@@ -364,6 +365,8 @@ EOF
   run "$CHANGEISH_SCRIPT" --save-history --save-prompt
   [ -f history.md ]
   [ -f prompt.md ]
+  cat history.md >>$ERROR_LOG
+  cat prompt.md >>$ERROR_LOG
 }
 
 @test "Output: custom changelog file" {
@@ -373,11 +376,11 @@ EOF
   echo "b" >b.txt
   mock_ollama "dummy" "Added a file"
   run "$CHANGEISH_SCRIPT" --changelog-file docs/CHANGELOG.md --save-history
+  echo "CHANGELOG:" >>$ERROR_LOG
+  cat docs/CHANGELOG.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
   echo "HISTORY:" >>$ERROR_LOG
   cat history.md >>$ERROR_LOG
-  echo "CHANGELOG:" >>$ERROR_LOG
-  cat docs/CHANGELOG.md >>$ERROR_LOG
   grep -q "Added a file" docs/CHANGELOG.md
 }
 
@@ -735,16 +738,23 @@ EOF
   echo "# Changelog" >CHANGELOG.md
   echo "## v4.0.0" >>CHANGELOG.md
   echo "- prev" >>CHANGELOG.md
+  echo "" >>CHANGELOG.md
 
   echo "fix: remote append" >file.txt
   git add CHANGELOG.md file.txt
   git commit -m "init"
+  echo "remote append"> test.txt
 
   mock_curl "dummy" "- fix: remote append"
   export CHANGEISH_API_KEY="dummy"
   run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake \
-    --api-model dummy --update-mode append --section-name "v4.0.0"
+    --api-model dummy --update-mode append --section-name "v4.0.0" \
+    --save-history --save-prompt
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
+  echo "History:" >>$ERROR_LOG
+  cat history.md >>$ERROR_LOG
+  echo "Prompt:" >>$ERROR_LOG
+  cat prompt.md >>$ERROR_LOG
   tail -n3 CHANGELOG.md | grep -q "fix: remote append"
 }
