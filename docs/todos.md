@@ -4,16 +4,13 @@
 
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
-- ENHANCEMENT: Add --update-mode with allowed values of "auto", "prepend", "append", and "update"
-- ENHANCEMENT: Add --section-name to specify which section to when updating the changelog.
-  - If not specified it should be generated based on the new or current version information in that priority order. 
-  - If not specified and no verison info can be found, then set section name to "Current Changes"
-  - If a matching section is found and it contains the current verison and the update-mode is either auto or update, that section should be sent to LLM with instructions to update the section with information about the git history.
-  - If matching section is found and the update mode is "auto" or "prepend" then insert the changelog content before the matching section
-  - If no matching section is found and the update mode is "auto" or "prepend" then insert the changelog content after the first # header and before the first ## heading
-  - If matching section is found and the update mode is "appened" then insert the changelog content after the matching section and before the next section or at the end of the file.
-  - If no matching section is found and the update mode is "append" then insert the changelog content at the end of the file.
-  - 
+- ENHANCEMENT: option to provide summary of changes
+- CHORE: improve prompt to handle updating existing sections
+- ENHANCEMENT: use existing section from existing change log in prompt instead of examples items when possible
+- CHORE: Add more "real-world" tests with more detailed output validation
+- BUG: fix debug flag handling, should default to "" so checks work correctly
+- ENHANCEMENT: allow user to specify patterns for matching sections, headers, versions, todos
+- ENHANCEMENT: improve prompt with more specific todo rules. ie. BUG->FIXED changes go in ### Fixed sub section
 
 
 ## Completed
@@ -56,3 +53,12 @@
 - FIXED: Bug with pager displaying on long git diff output
 - ADDED: Add --generation-mode with allowed values of "auto", "local", "remote", and "none"
 - ADDED: add option to create a prompt template based on the default
+- ADDED: Add --update-mode with allowed values of "auto", "prepend", "append", and "update"
+- ADDED: Add --section-name to specify which section to when updating the changelog.
+  - If not specified it should be generated based on the new or current version information in that priority order. 
+  - If not specified and no verison info can be found, then set section name to "Current Changes"
+  - If a matching section is found and it contains the current verison and the update-mode is either auto or update, that section should be sent to LLM with instructions to update the section with information about the git history.
+  - If matching section is found and the update mode is "prepend" then insert the changelog content before the matching section
+  - If no matching section is found and the update mode is "auto" or "prepend" then insert the changelog content after the first # header and before the first ## heading
+  - If matching section is found and the update mode is "appened" then insert the changelog content after the matching section and before the next section or at the end of the file.
+  - If no matching section is found and the update mode is "append" then insert the changelog content at the end of the file.

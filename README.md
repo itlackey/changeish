@@ -17,6 +17,24 @@ Contributions, stars, and feedback are welcome! If you find this project useful,
 - 💡 **Beginner-friendly**: Simple CLI, clear documentation, and example `.env` for quick setup.
 - 🌍 **Open source & community-driven**: Contributions, issues, and feature requests are encouraged!
 
+## What's New in v0.2.0
+
+- **Changelog section update modes:** Use `--update-mode` and `--section-name` to control how and where new changelog content is inserted or updated.
+- **Flexible diff filtering:** Use `--include-pattern` and `--exclude-pattern` for advanced file selection in diffs (replaces `--short-diff`).
+- **Config file support:** Load settings from a `.env` file with `--config-file`.
+- **Improved temp file handling:** History and prompt files are now created as temporary files and only saved if `--save-history` or `--save-prompt` is used.
+- **Changelog generation modes:**
+  - `--generation-mode` controls how changelogs are generated:
+    - `none`: Skip changelog generation
+    - `local`: Force local model
+    - `remote`: Force remote API
+    - `auto`: Try local, fallback to remote
+- **Enhanced commit range logic:** Better handling of commit ranges, especially with `--all`.
+- **Advanced TODO filtering:** Use regex patterns to filter TODOs in diffs.
+- **Automatic version file detection:** If not specified, common version files are auto-detected.
+- **Prompt template export:** Use `--make-prompt-template <file>` to write the default prompt template to a file for customization.
+- **Improved error handling:** More informative errors for missing files, repos, or config.
+
 ## How It Works
 
 - The script collects commit history and diffs in the specified range.
@@ -68,11 +86,21 @@ changeish --all --changelog-file ./docs/CHANGELOG.md
 Use a remote API for changelog generation:
 
 ```bash
-changeish --remote --api-model qwen3 --api-url https://api.example.com/v1/chat/completions
+changeish --generation-mode remote --api-model qwen3 --api-url https://api.example.com/v1/chat/completions
+```
+
+Write the default prompt template to a file for editing:
+
+```bash
+changeish --make-prompt-template my_prompt_template.md
 ```
 
 ### Options
 
+- `--generation-mode MODE`   Control how changelog is generated: `auto` (default), `local`, `remote`, `none`
+- `--make-prompt-template PATH`  Write the default prompt template to the given file and exit
+- `--update-mode MODE`       Section update mode: `auto` (default), `prepend`, `append`, `update`
+- `--section-name NAME`      Target section name (default: detected version or "Current Changes")
 - `--current`               Use uncommitted (working tree) changes for git history
 - `--staged`                Use staged (index) changes for git history
 - `--all`                   Include all history (from first commit to HEAD)
