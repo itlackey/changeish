@@ -5,6 +5,7 @@
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ENHANCEMENT: option to provide summary of changes
+- ENHANCEMENT: option to generate a release announcement
 - CHORE: improve prompt to handle updating existing sections
 - ENHANCEMENT: use existing section from existing change log in prompt instead of examples items when possible
 - CHORE: Add more "real-world" tests with more detailed output validation
