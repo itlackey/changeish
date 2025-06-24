@@ -4,7 +4,7 @@ mkdir -p "$BATS_TEST_DIRNAME/.logs"
 source "$BATS_TEST_DIRNAME/../changes.sh"
 export ERROR_LOG="$BATS_TEST_DIRNAME/.logs/error.log"
 #echo >$ERROR_LOG
-setup_file(){
+setup_file() {
     # Ensure the error log is empty before each test
     : >"$ERROR_LOG"
 }
@@ -12,9 +12,14 @@ export debug=true
 setup() {
     TMP_DIR=$(mktemp -d)
     cd "$TMP_DIR"
+    echo "===========================" >>"$ERROR_LOG"
+    echo "Running $BATS_TEST_NAME" >>"$ERROR_LOG"
 }
 
 teardown() {
+    echo "Completed $BATS_TEST_NAME" >>"$ERROR_LOG"
+    echo "===========================" >>"$ERROR_LOG"
+
     cd /
     rm -rf "$TMP_DIR"
 }
@@ -30,6 +35,7 @@ run_insert_changelog() {
 }
 
 @test "update mode: updates existing section" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -45,9 +51,7 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
-    echo "Changelog exists: $(test -f CHANGELOG.md && echo "yes" || echo "no")" >>"$ERROR_LOG"
-    cat CHANGELOG.md >>"$ERROR_LOG"
-    echo "===========================" >>"$ERROR_LOG"
+
     grep -Fq -- "- new content" CHANGELOG.md || {
         echo "Expected '- new content' in CHANGELOG.md" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
@@ -58,9 +62,12 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
 }
 
 @test "auto mode: updates existing section" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -83,9 +90,13 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "prepend mode: inserts before section" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -98,7 +109,6 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
-    grep -Fn -- "- prepended" CHANGELOG.md >> "$ERROR_LOG" || true
     pos1=$(grep -Fn -- "- prepended" CHANGELOG.md | cut -d: -f1)
     pos2=$(grep -n "## v3.0.0" CHANGELOG.md | cut -d: -f1)
     [ "$pos1" -lt "$pos2" ] || {
@@ -106,9 +116,13 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "append mode: inserts after section" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -137,6 +151,9 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "update mode: adds new section if not found" {
@@ -162,9 +179,13 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "prepend mode: adds new section if not found" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -187,9 +208,13 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "append mode: adds new section at end if not found" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -212,9 +237,13 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "handles empty changelog file (creates section)" {
+    
     rm -f CHANGELOG.md
     run insert_changelog CHANGELOG.md "- first entry" "v0.1.0" update ""
     [ "$status" -eq 0 ] || {
@@ -234,9 +263,11 @@ EOF
     }
     echo "Changelog created successfully" >>"$ERROR_LOG"
     cat CHANGELOG.md >>"$ERROR_LOG"
+
 }
 
 @test "handles multiline content" {
+    
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -264,4 +295,50 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
 }
+
+@test "content is surrounded by newlines in changelog" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v1.2.3
+- old
+EOF
+    run insert_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
+    [ "$status" -eq 0 ] || {
+        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    # Extract the section
+    start=$(grep -n '^## Current Changes' CHANGELOG.md | cut -d: -f1)
+    end=$(tail -n +$((start+1)) CHANGELOG.md | grep -n '^## ' | head -n1 | cut -d: -f1)
+    if [ -n "$end" ]; then
+        end=$((start + end - 1))
+    else
+        end=$(wc -l <CHANGELOG.md)
+    fi
+    section=$(sed -n "$start,${end}p" CHANGELOG.md)
+    # Check for leading and trailing newlines around content
+    # Remove the header line
+    content_only=$(echo "$section" | tail -n +2)
+    # Should start and end with a blank line
+    first_line=$(echo "$content_only" | head -n1)
+    last_line=$(echo "$content_only" | tail -n1)
+    [ -z "$first_line" ] || {
+        echo "Expected blank line before content in section" >>"$ERROR_LOG"
+        echo "$section" >>"$ERROR_LOG"
+        false
+    }
+    [ -z "$last_line" ] || {
+        echo "Expected blank line after content in section" >>"$ERROR_LOG"
+        echo "$section" >>"$ERROR_LOG"
+        false
+    }
+    echo "Changelog section is surrounded by newlines" >>"$ERROR_LOG"
+    echo "$section" >>"$ERROR_LOG"
+}
+

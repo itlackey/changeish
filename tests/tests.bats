@@ -634,7 +634,7 @@ EOF
 
 @test "Update-mode: prepend inserts before existing section" {
   echo "# Changelog" >CHANGELOG.md
-  echo "## v1.0.0 (2025-01-01)" >>CHANGELOG.md
+  echo "## v1.0.0" >>CHANGELOG.md
   echo "- old entry" >>CHANGELOG.md
 
   echo "feat: new prepended" >file.txt
@@ -645,10 +645,16 @@ EOF
   run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
     --update-mode prepend --section-name "v1.0.0"
   [ "$status" -eq 0 ]
-
+  cat CHANGELOG.md >>$ERROR_LOG
   # Expect new content above the v1.0.0 section
-  run grep -n "feat: new prepended" CHANGELOG.md
-  [[ "${lines[0]}" -lt "$(grep -n '## v1.0.0' CHANGELOG.md | cut -d: -f1)" ]]
+  pos1=$(grep -Fn -- "feat: new prepended" CHANGELOG.md | cut -d: -f1)
+  pos2=$(grep -n "## v1.0.0" CHANGELOG.md | cut -d: -f1)
+  [ "$pos1" -lt "$pos2" ] || {
+    echo "Expected '- prepended' before '## v1.0.0' (lines $pos1 < $pos2)" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    false
+  }
+  echo "Test passed: prepended content is before the section header" >>"$ERROR_LOG"
 }
 
 @test "Update-mode: append adds after existing section" {

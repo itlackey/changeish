@@ -425,6 +425,11 @@ insert_changelog() {
     esc_version="$(echo "$version" | sed 's/[][\\/.*^$]/\\&/g')"
     local pattern="^## $section_name?"
 
+    # if content does not end with a newline, add one
+    if [[ "${content: -1}" != $'\n' ]]; then
+        content="$content"$'\n'
+    fi
+
     if [[ -n "$existing_changelog_section" ]]; then
         # Section exists
         case "$update_mode" in
@@ -446,10 +451,20 @@ insert_changelog() {
             ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
         prepend)
-            sed -i "/$pattern/i\\
-                ## Current Changes\\
-                $content
-                " "$file"
+            # Insert content immediately before the section header
+            local start_line
+            start_line=$(grep -nE "$pattern" "$file" | head -n1 | cut -d: -f1)
+            if [[ -z "$start_line" ]]; then
+                echo "Section '$section_name' not found in $file" >&2
+                exit 1
+            fi
+            awk -v insert_line="$start_line" -v content="$content" '
+                NR == insert_line {
+                    print "## Current Changes"
+                    print content
+                }
+                { print }
+            ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
         append)
             [[ "$debug" == true ]] && echo "Appending 'Current Changes' section after existing section for '$section_name' in $file"
