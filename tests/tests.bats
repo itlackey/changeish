@@ -283,9 +283,10 @@ EOF
   generate_commits
   echo "ADD" >TODO.md
   git add TODO.md && git commit -m "add TODO"
-  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history
+  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history --debug
   [ "$status" -eq 0 ]
-  grep -q "diff --git a/TODO.md b/TODO.md" history.md
+  cat history.md >>$ERROR_LOG
+  grep -q "TODO.md TODO.md" history.md
   grep -q "ADD" history.md
 }
 
@@ -305,7 +306,7 @@ EOF
   git add foo.md config.txt && git commit -m "add files"
   run "$CHANGEISH_SCRIPT" --all --include-pattern '*.md' --exclude-pattern 'config*' --save-history
   [ "$status" -eq 0 ]
-  grep -q "diff --git a/foo.md b/foo.md" history.md
+  grep -q "diff --git foo.md foo.md" history.md
   ! grep -q "config.txt" history.md
 }
 

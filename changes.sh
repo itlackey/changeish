@@ -55,13 +55,14 @@
 #   CHANGEISH_API_URL     Default API URL for remote generation (overridden by --api-url)
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
-set -euo pipefail
+#set -euo pipefail
+set -e
 
 # Initialize default option values
 debug="false"
 from_rev=""
 to_rev=""
-default_diff_options="--patience --unified=0 --no-color -b -w --compact-summary --color-moved=no"
+default_diff_options="--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
 include_pattern=""
 exclude_pattern=""
 todo_pattern="*todo*"
@@ -79,7 +80,7 @@ remote=false
 api_url="${CHANGEISH_API_URL:-}"
 api_key="${CHANGEISH_API_KEY:-}"
 api_model="${CHANGEISH_API_MODEL:-}"
-default_todo_grep_pattern="TODO|FIXME|ENHANCEMENT|DONE|CHORE"
+default_todo_grep_pattern="TODO|FIX|ENHANCEMENT|DONE|CHORE|ADD"
 generation_mode="auto"
 update_mode="auto"
 section_name="auto"
@@ -224,7 +225,7 @@ build_entry() {
         #[[ "$debug" == false ]] && echo "$found_version_file" >>"$outfile"
     fi
 
-   # [[ "$debug" == false ]] && echo "TODOs diff: ${todo_pattern}"
+    # [[ "$debug" == false ]] && echo "TODOs diff: ${todo_pattern}"
     if [[ "$debug" == true ]]; then
         git --no-pager diff --unified=0 -- "*todo*"
     fi
@@ -280,9 +281,11 @@ build_entry() {
     if [[ ${#diff_spec[@]} -gt 0 ]]; then
         # shellcheck disable=SC2086
         git --no-pager diff "${diff_spec[@]}" $default_diff_options "${diff_args[@]}" >>"$outfile"
+            #| grep -Ev '^(@|index |--- |\+\+\+ )' || true >>"$outfile"        
     else
         # shellcheck disable=SC2086
         git --no-pager diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
+        #| grep -Ev '^(^@|^index |--- |\+\+\+ )' || true >>"$outfile"
     fi
     echo '```' >>"$outfile"
 
@@ -697,7 +700,7 @@ fi
 # Load configuration file if specified, otherwise source .env in current directory if present
 if [[ -n "$config_file" ]]; then
     if [[ -f "$config_file" ]]; then
-       # [[ "$debug" == true ]] && echo "Sourcing config file: $config_file"
+        # [[ "$debug" == true ]] && echo "Sourcing config file: $config_file"
         # shellcheck disable=SC1090
         source "$config_file"
     else
@@ -705,7 +708,7 @@ if [[ -n "$config_file" ]]; then
         exit 1
     fi
 elif [[ -f .env ]]; then
-   # [[ $debug ]] && echo "Sourcing .env file..."
+    # [[ $debug ]] && echo "Sourcing .env file..."
     # shellcheck disable=SC1091
     source .env
 fi
