@@ -3,6 +3,10 @@
         "changeish",
         "changesish"
     ],
+    "[bats]": {
+
+    },
+    
     "todo-tree.general.tags": [
         "BUG",
         "HACK",
