@@ -368,12 +368,12 @@ generate_response() {
     if $remote; then
         # Use remote API generation
         model="$api_model"
-        echo "Running remote model '$model'..." >&2
+        #echo "Running remote model '$model'..." >&2
         response="$(generate_remote "$model" "$prompt_file")"
     else
         # Use local Ollama model if available
         if command -v ollama >/dev/null 2>&1; then
-            echo "Running Ollama model '$model'..." >&2
+            #echo "Running Ollama model '$model'..." >&2
             response="$(run_ollama "$model" "$prompt_file")"
         else
             echo "ollama not found, skipping changelog generation." >&2
@@ -436,7 +436,11 @@ insert_changelog() {
             else
                 end_line=$(wc -l <"$file")
             fi
-            sed -i "${start_line},${end_line}c\n## $version\n$content\n" "$file"
+            awk -v start="$start_line" -v end="$end_line" -v version="$version" -v content="$content" '
+                NR < start { print }
+                NR == start { print "## " version; print content }
+                NR > end { print }
+            ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
         prepend)
             # Insert 'Current Changes' section before matching section
@@ -921,7 +925,6 @@ if $should_generate_changelog; then
         echo "# Changelog" >"$changelog_file"
         echo "" >>"$changelog_file"
     fi
-    echo "Generating changelog using model: $model"
     generate_changelog "$model" "$changelog_file"
 else
     echo "Changelog generation skipped. Use --generation-mode to enable it."

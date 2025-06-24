@@ -1,8 +1,11 @@
 #!/usr/bin/env bats
 
 setup() {
+  load 'test_helper/bats-support/load'
+  load 'test_helper/bats-assert/load'
   ORIG_DIR="$PWD"
-  TMP_DIR="$(mktemp -d)"
+  TMP_DIR="$(mktemp -d)/changeish-tests"
+  mkdir -p "$TMP_DIR"
   mkdir -p "$BATS_TEST_DIRNAME/.logs"
   cd "$TMP_DIR"
   git init -q
@@ -414,7 +417,7 @@ EOF
   echo "ADDED: do cool stuff" >>todos.md
 
   run "$CHANGEISH_SCRIPT" --save-history --debug
-  [ "$status" -eq 0 ]
+  assert_success
 
   # Compare history.md to expected, ignoring lines starting with '**Date:**', blank lines, and whitespace
   diff -B -w -I '^\*\*Date:\*\*' "$BATS_TEST_DIRNAME/assets/uncommitted_history.md" history.md >diff_output.txt || true
@@ -745,7 +748,7 @@ EOF
   echo "fix: remote append" >file.txt
   git add CHANGELOG.md file.txt
   git commit -m "init"
-  echo "remote append"> test.txt
+  echo "remote append" >test.txt
 
   mock_curl "dummy" "- fix: remote append"
   export CHANGEISH_API_KEY="dummy"
