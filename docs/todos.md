@@ -4,13 +4,12 @@
 
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
-- ENHANCEMENT: option to provide summary of changes
-- ENHANCEMENT: option to generate a release announcement
+- ENHANCEMENT: --type "summary" option to provide summary of changes
+- ENHANCEMENT: --type "annoucement" option to generate a release announcement
 - CHORE: improve prompt to handle updating existing sections
-- ENHANCEMENT: use existing section from existing change log in prompt instead of examples items when possible
+
 - CHORE: Add more "real-world" tests with more detailed output validation
-- BUG: fix debug flag handling, should default to "" so checks work correctly
-- ENHANCEMENT: allow user to specify patterns for matching sections, headers, versions, todos
+- ENHANCEMENT: allow user to specify (regex?) patterns for matching sections, headers, versions, todos
 - ENHANCEMENT: improve prompt with more specific todo rules. ie. BUG->FIXED changes go in ### Fixed sub section
 
 
@@ -63,3 +62,5 @@
   - If no matching section is found and the update mode is "auto" or "prepend" then insert the changelog content after the first # header and before the first ## heading
   - If matching section is found and the update mode is "appened" then insert the changelog content after the matching section and before the next section or at the end of the file.
   - If no matching section is found and the update mode is "append" then insert the changelog content at the end of the file.
+- ADDED: use existing section from existing change log in prompt instead of examples items when possible
+- FIXED: fix debug flag handling, should default to "" so checks work correctly

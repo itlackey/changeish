@@ -18,18 +18,18 @@
 #   --api-model MODEL       Specify remote API model (overrides --model for remote usage)
 #   --api-url URL           Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH   Path to changelog file to update (default: ./CHANGELOG.md)
-#   --make-prompt-template  Write the default prompt template to a file
 #   --prompt-template PATH  Path to prompt template file (default: ./changelog_prompt.md)
-#   --save-prompt           Generate prompt file only and do not produce changelog
-#   --save-history          Do not delete the intermediate git history file
-#   --version-file PATH     File to check for version number changes in each commit
-#   --config-file PATH      Path to a shell config file to source before running (overrides .env)
 #   --update-mode MODE      Section update mode: auto (default), prepend, append, update
 #   --section-name NAME     Target section name (default: detected version or "Current Changes")
-#   --update                Update this script to the latest version and exit
-#   --available-releases    Show available script releases and exit
-#   --debug                 Enable debug output
+#   --version-file PATH     File to check for version number changes in each commit
+#   --config-file PATH      Path to a shell config file to source before running (overrides .env)
+#   --save-prompt           Generate prompt file only and do not produce changelog
+#   --save-history          Do not delete the intermediate git history file
+#   --make-prompt-template  Write the default prompt template to a file
 #   --version               Show script version and exit
+#   --available-releases    Show available script releases and exit
+#   --update                Update this script to the latest version and exit
+#   --debug                 Enable debug output
 #
 # Example:
 #   # Update changelog with uncommitted changes using local model:
@@ -89,14 +89,13 @@ section_name="auto"
 default_prompt=$(
     cat <<'END_PROMPT'
 <<<INSTRUCTIONS>>>
-Task: Generate a changelog from the Git history that follows the structure below. Be sure to use only the information from the Git history in your response.
+Task: Generate a changelog from the Git history that follows the structure below. 
+Be sure to use only the information from the Git history in your response. 
 Output rules
 1. Use only information from the Git history provided in the prompt.
-2. Output **ONLY** valid Markdown on the format provided in these instructions.
+2. Output **ONLY** valid Markdown based on the format provided in these instructions.
+    - Do not include the ``` code block markers in your output.
 3. Use this exact hierarchy:
-
-   ## {version}
-
    ### Enhancements
 
    - ...
@@ -108,22 +107,20 @@ Output rules
    ### Chores
 
    - ...
-4. Omit any section that would be empty.
-
-Version ordering: newest => oldest (descending).
-
+4. Omit any section that would be empty and do not include a ## header.
+END_PROMPT
+)
+example_changelog=$(
+    cat <<'END_EXAMPLE'
 <<<Example Output (for reference only)>>>
-
-## v2.0.1
 
 ### Enhancements
 
 - Example enhancement A
 
 <<<END>>>
-END_PROMPT
+END_EXAMPLE
 )
-
 # Common files to check for version changes if --version-file not specified
 default_version_files=("changes.sh" "package.json" "pyproject.toml" "setup.py" "Cargo.toml" "composer.json" "build.gradle" "pom.xml")
 
@@ -316,8 +313,18 @@ generate_prompt() {
     fi
     # Compose the final prompt by inserting markers and the git history content
     local complete_prompt
-    complete_prompt="${prompt_text}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
-    complete_prompt="${complete_prompt}\\n<<<EXISTING CHANGELOG>>>\\n$existing_section\\n<<<END>>>"
+    complete_prompt="${prompt_text}"
+
+    # If an existing changelog section is provided, include it in the prompt
+    if [[ -n "$existing_section" ]]; then
+        complete_prompt=$(echo -e "${complete_prompt}\\n5. Include all of the existing item from the "EXISTING CHANGELOG". DO NOT remove any existing items.")
+        complete_prompt="${complete_prompt}\\n<<<END>>>\\n<<<EXISTING CHANGELOG>>>\\n$existing_section\\n<<<END>>>"
+    else
+        complete_prompt="${complete_prompt}\\n<<<END>>>\\n${example_changelog}"
+    fi
+     complete_prompt="${complete_prompt}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
+
+
     echo -e "$complete_prompt" >"$prompt_file"
 
     #[[ $debug ]] && echo "Generated prompt content in $prompt_file"
@@ -520,7 +527,7 @@ insert_changelog() {
         esac
     fi
 
-  # ──────────────────────────────────────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────────
     # Normalize headers:
     # - Deduplicate only H1 (# ) and H2 (## ) lines
     # - Always ensure one blank line before & after every header
@@ -558,8 +565,7 @@ insert_changelog() {
             prev = $0
         }
     }
-    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
-
+    ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
 
     if ! (tail -n5 "$file" | grep -q "Managed by changeish"); then
         echo -e "\nManaged by changeish\n" >>"$file"
@@ -582,6 +588,17 @@ get_current_version_from_file() {
         echo ""
         return 1
     fi
+
+    # If files is changes.sh, try to extract version from the first line
+    if [[ "$file" == "changes.sh" ]]; then
+        local version
+        version=$(grep -Eo 'Version: [0-9]+\.[0-9]+(\.[0-9]+)?' "$file" | head -n3 | grep -Eo 'v?[0-9]+\.[0-9]+(\.[0-9]+)?')
+        if [[ -n "$version" ]]; then
+            echo "$version"
+            return 0
+        fi
+    fi
+
     # Try common version patterns
     local version
     version=$(grep -Eo 'version[[:space:]]*[:=][[:space:]]*["'\'']?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -n1 | grep -Eo '([0-9]+\.[0-9]+(\.[0-9]+)?)')
@@ -812,6 +829,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
             section_name="Current Changes"
         fi
     fi
+    echo "Using section name: $section_name"
 
     # set existing_changelog_section
     existing_changelog_section=$(extract_changelog_section "$section_name" "$changelog_file")
