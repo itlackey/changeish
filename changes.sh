@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # changeish - A script to generate a changelog from Git history, optionally using AI (Ollama or remote API)
-# Version: 0.2.0 (unreleased)
+# Version: 0.2.0
 # Usage: changeish [OPTIONS]
 #
 # Options:
@@ -95,7 +95,7 @@ Output rules
 2. Output **ONLY** valid Markdown on the format provided in these instructions.
 3. Use this exact hierarchy:
 
-   ## {version} ({date})
+   ## {version}
 
    ### Enhancements
 
@@ -112,9 +112,9 @@ Output rules
 
 Version ordering: newest => oldest (descending).
 
-### Example Output (for reference only)
+<<<Example Output (for reference only)>>>
 
-## v2.0.1 (2025-02-13)
+## v2.0.1
 
 ### Enhancements
 
@@ -519,6 +519,56 @@ insert_changelog() {
             ;;
         esac
     fi
+
+  # ──────────────────────────────────────────────────────────────────────────
+    # Normalize headers:
+    # - Deduplicate only H1 (# ) and H2 (## ) lines
+    # - Always ensure one blank line before & after every header
+    awk '
+    BEGIN { prev = "" }
+    {
+        if ($0 ~ /^# /) {
+            # H1: dedupe
+            if (!seen1[$0]++) {
+                if (prev != "") print ""
+                print
+                print ""
+                prev = ""
+            }
+        }
+        else if ($0 ~ /^## /) {
+            # H2: dedupe
+            if (!seen2[$0]++) {
+                if (prev != "") print ""
+                print
+                print ""
+                prev = ""
+            }
+        }
+        else if ($0 ~ /^###/) {
+            # H3+ (###…): always print, but still normalize spacing
+            if (prev != "") print ""
+            print
+            print ""
+            prev = ""
+        }
+        else {
+            # normal line
+            print
+            prev = $0
+        }
+    }
+    ' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+
+
+    if ! (tail -n5 "$file" | grep -q "Managed by changeish"); then
+        echo -e "\nManaged by changeish\n" >>"$file"
+    fi
+
+    # Remove any double blank lines (two or more newlines in a row) and replace with a single blank line
+    # after all other processing
+    sed -i ':a;N;$!ba;s/\n\{3,\}/\n\n/g' "$file"
+
 }
 
 # Extract the current version string from a version file

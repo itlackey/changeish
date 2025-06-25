@@ -35,7 +35,7 @@ run_insert_changelog() {
 }
 
 @test "update mode: updates existing section" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -67,7 +67,7 @@ EOF
 }
 
 @test "auto mode: updates existing section" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -96,7 +96,7 @@ EOF
 }
 
 @test "prepend mode: inserts before section" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -122,7 +122,7 @@ EOF
 }
 
 @test "append mode: inserts after section" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -185,7 +185,7 @@ EOF
 }
 
 @test "prepend mode: adds new section if not found" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -214,7 +214,7 @@ EOF
 }
 
 @test "append mode: adds new section at end if not found" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -227,7 +227,7 @@ EOF
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
-    tail -n5 CHANGELOG.md | grep -q "## v10.0.0" || {
+    tail -n6 CHANGELOG.md | grep -q "## v10.0.0" || {
         echo "Expected '## v10.0.0' at end of CHANGELOG.md" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
@@ -243,7 +243,7 @@ EOF
 }
 
 @test "handles empty changelog file (creates section)" {
-    
+
     rm -f CHANGELOG.md
     run insert_changelog CHANGELOG.md "- first entry" "v0.1.0" update ""
     [ "$status" -eq 0 ] || {
@@ -267,7 +267,7 @@ EOF
 }
 
 @test "handles multiline content" {
-    
+
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -299,7 +299,7 @@ EOF
     cat CHANGELOG.md >>"$ERROR_LOG"
 }
 
-@test "content is surrounded by newlines in changelog" {
+@test "no duplicate headers and only one first-level heading" {
     cat >CHANGELOG.md <<EOF
 # Changelog
 
@@ -307,38 +307,61 @@ EOF
 - old
 EOF
     run insert_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
-    [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
+    # Check for any duplicate header lines
+    duplicates=$(grep '^#' CHANGELOG.md | sort | uniq -d)
+    [ -z "$duplicates" ] || {
+        echo "Duplicate header(s) found:"
+        echo "$duplicates"
+        return 1
     }
-    cat CHANGELOG.md >>"$ERROR_LOG"
-    # Extract the section
-    start=$(grep -n '^## Current Changes' CHANGELOG.md | cut -d: -f1)
-    end=$(tail -n +$((start+1)) CHANGELOG.md | grep -n '^## ' | head -n1 | cut -d: -f1)
-    if [ -n "$end" ]; then
-        end=$((start + end - 1))
-    else
-        end=$(wc -l <CHANGELOG.md)
-    fi
-    section=$(sed -n "$start,${end}p" CHANGELOG.md)
-    # Check for leading and trailing newlines around content
-    # Remove the header line
-    content_only=$(echo "$section" | tail -n +2)
-    # Should start and end with a blank line
-    first_line=$(echo "$content_only" | head -n1)
-    last_line=$(echo "$content_only" | tail -n1)
-    [ -z "$first_line" ] || {
-        echo "Expected blank line before content in section" >>"$ERROR_LOG"
-        echo "$section" >>"$ERROR_LOG"
-        false
+
+    # Ensure there is exactly one first‐level heading (H1)
+    h1_count=$(grep -c '^# ' CHANGELOG.md)
+    [ "$h1_count" -eq 1 ] || {
+        echo "Expected exactly one first-level heading, but found $h1_count"
+        return 1
     }
-    [ -z "$last_line" ] || {
-        echo "Expected blank line after content in section" >>"$ERROR_LOG"
-        echo "$section" >>"$ERROR_LOG"
-        false
-    }
-    echo "Changelog section is surrounded by newlines" >>"$ERROR_LOG"
-    echo "$section" >>"$ERROR_LOG"
 }
 
+@test "all headers are surrounded by blank lines and file ends with newline" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+
+## v1.2.3
+- old
+
+EOF
+    run insert_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    # for each header line, ensure blank line before and after
+    while read -r line; do
+        lineno="${line%%:*}"
+        header="${line#*:}"
+        echo "Checking header at line $lineno ||" >>"$ERROR_LOG"
+        if [ "$lineno" -gt 1 ]; then
+            prev=$(sed -n "$((lineno - 1))p" CHANGELOG.md)
+            echo "Previous line before header at $lineno: '$prev'" >>"$ERROR_LOG"
+            [ -z "$prev" ] || {
+                echo "Header at line $lineno not preceded by blank line" >>"$ERROR_LOG"
+                return 1
+            }
+        fi
+        next=$(sed -n "$((lineno + 1))p" CHANGELOG.md)
+        echo "Next line after header at $lineno: '$next'" >>"$ERROR_LOG"
+        # Only check next if not past end of file
+        if [ "$((lineno + 1))" -le "$(wc -l <CHANGELOG.md)" ]; then
+            [ -z "$next" ] || {
+                echo "Header at line $lineno not followed by blank line" >>"$ERROR_LOG"
+                return 1
+            }
+        fi
+    done < <(grep -n '^#' CHANGELOG.md)
+
+    # ensure the file ends with a newline
+    last_char=$(tail -c1 CHANGELOG.md)
+    [ -z "$last_char" ] || {
+        echo "CHANGELOG.md does not end with a newline" >>"$ERROR_LOG"
+        return 1
+    }
+}

@@ -697,8 +697,8 @@ EOF
   cat CHANGELOG.md >>$ERROR_LOG
 
   [ "$status" -eq 0 ]
-  tail -n3 CHANGELOG.md | grep -q "chore: at end"
-  tail -n4 CHANGELOG.md | grep -q "## nope"
+  tail -n5 CHANGELOG.md | grep -q "chore: at end"
+  tail -n6 CHANGELOG.md | grep -q "## nope"
 }
 
 @test "Update-mode: auto updates when matching current version" {
@@ -767,5 +767,5 @@ EOF
   cat history.md >>$ERROR_LOG
   echo "Prompt:" >>$ERROR_LOG
   cat prompt.md >>$ERROR_LOG
-  tail -n3 CHANGELOG.md | grep -q "fix: remote append"
+  tail -n5 CHANGELOG.md | grep -q "fix: remote append"
 }
