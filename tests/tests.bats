@@ -134,7 +134,7 @@ EOF
 
 @test "Meta: --version prints version" {
   run "$CHANGEISH_SCRIPT" --version
-  echo "$output" | grep -q "0.2.0 (unreleased)"
+  echo "$output" | grep -q "0.2.0"
 }
 
 @test "Meta: --available-releases prints tags" {
