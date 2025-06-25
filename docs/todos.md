@@ -6,7 +6,7 @@
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ENHANCEMENT: --type "summary" option to provide summary of changes
 - ENHANCEMENT: --type "annoucement" option to generate a release announcement
-- CHORE: improve prompt to handle updating existing sections
+- ENHANCEMENT: add git config user.name to output
 
 - CHORE: Add more "real-world" tests with more detailed output validation
 - ENHANCEMENT: allow user to specify (regex?) patterns for matching sections, headers, versions, todos
@@ -64,3 +64,4 @@
   - If no matching section is found and the update mode is "append" then insert the changelog content at the end of the file.
 - ADDED: use existing section from existing change log in prompt instead of examples items when possible
 - FIXED: fix debug flag handling, should default to "" so checks work correctly
+- DONE: improve prompt to handle updating existing sections

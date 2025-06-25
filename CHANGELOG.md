@@ -27,13 +27,14 @@
 - Added functionality to write the default prompt template to a file using the `--make-prompt-template` flag.
 - Normalized headers in `changes.sh` and added checks for duplicate headers, exactly one first-level heading, and correct spacing around headers.
 - Added tests to ensure that the changelog is correctly formatted.
-- use existing section from existing change log in prompt instead of examples items when possible
 
 ### Fixes
 
 - Fixed an issue where specifying a non-existent version file caused an error.
 - Fixed issue where changelog file creation was skipped when the file did not exist.
 - fixed debug flag handling, should default to "" so checks work correctly
+- Fix: correct URL in `changes.sh`
+- Update todos.md entry for "CHORE: improve prompt to handle updating existing sections"
 
 ### Chores
 
@@ -49,7 +50,7 @@
 - Added `.vscode/launch.json` for better debugging experience.
 - Enhanced `changes.sh` to provide more informative error messages when the specified version file does not exist.
 - Corrected the logic for saving history and handling debug options.
-- renamed `--generation-mode` to `--model-provider`.
+- Renamed `--generation-mode` to `--model-provider`.
 
 ## v0.1.10
 
@@ -228,6 +229,3 @@ Generated my changeish
 ### Fixes
 
 * Fixed an issue where the script does not append to the end of changelog if no existing sections are found.
-
-Managed by changeish
-
