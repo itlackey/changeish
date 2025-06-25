@@ -194,33 +194,33 @@ build_entry() {
 
     #[[ "$debug" == true ]] && echo "Version diff: ${found_version_file}"
 
-    # version‐file diff
-    if [[ -n "$found_version_file" ]]; then
-        {
-            echo ""
-            local version_diff=""
-            if [[ ${#diff_spec[@]} -gt 0 ]]; then
-                # shellcheck disable=SC2086
-                version_diff="$(git --no-pager diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
-            else
-                # shellcheck disable=SC2086
-                version_diff="$(git --no-pager diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
-            fi
-            if [[ -n "$version_diff" ]]; then
-                echo "### Version Changes"
-                echo '```diff'
-                echo "$version_diff"
-                echo '```'
-            else
-                # No diff, just show current version lines from the file
-                echo "### Latest Version"
-                echo '```diff'
-                grep -Ei 'version' "$found_version_file" || true
-                echo '```'
-            fi
-        } >>"$outfile"
-        #[[ "$debug" == false ]] && echo "$found_version_file" >>"$outfile"
-    fi
+    # # version‐file diff
+    # if [[ -n "$found_version_file" ]]; then
+    #     {
+    #         echo ""
+    #         local version_diff=""
+    #         if [[ ${#diff_spec[@]} -gt 0 ]]; then
+    #             # shellcheck disable=SC2086
+    #             version_diff="$(git --no-pager diff "${diff_spec[@]}" $default_diff_options -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+    #         else
+    #             # shellcheck disable=SC2086
+    #             version_diff="$(git --no-pager diff $default_diff_options "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+    #         fi
+    #         if [[ -n "$version_diff" ]]; then
+    #             echo "### Version Changes"
+    #             echo '```diff'
+    #             echo "$version_diff"
+    #             echo '```'
+    #         else
+    #             # No diff, just show current version lines from the file
+    #             echo "### Latest Version"
+    #             echo '```diff'
+    #             grep -Ei 'version' "$found_version_file" || true
+    #             echo '```'
+    #         fi
+    #     } >>"$outfile"
+    #     #[[ "$debug" == false ]] && echo "$found_version_file" >>"$outfile"
+    # fi
 
     # [[ "$debug" == false ]] && echo "TODOs diff: ${todo_pattern}"
     if [[ "$debug" == true ]]; then
@@ -317,13 +317,12 @@ generate_prompt() {
 
     # If an existing changelog section is provided, include it in the prompt
     if [[ -n "$existing_section" ]]; then
-        complete_prompt=$(echo -e "${complete_prompt}\\n5. Include all of the existing item from the "EXISTING CHANGELOG". DO NOT remove any existing items.")
+        complete_prompt=$(echo -e "${complete_prompt}\\n5. Include ALL of the existing items from the "EXISTING CHANGELOG" in your response. DO NOT remove any existing items.")
         complete_prompt="${complete_prompt}\\n<<<END>>>\\n<<<EXISTING CHANGELOG>>>\\n$existing_section\\n<<<END>>>"
     else
         complete_prompt="${complete_prompt}\\n<<<END>>>\\n${example_changelog}"
     fi
-     complete_prompt="${complete_prompt}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
-
+    complete_prompt="${complete_prompt}\\n<<<GIT HISTORY>>>\\n$(cat "$history_file")\\n<<<END>>>"
 
     echo -e "$complete_prompt" >"$prompt_file"
 
@@ -568,7 +567,7 @@ insert_changelog() {
     ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
 
     if ! (tail -n5 "$file" | grep -q "Managed by changeish"); then
-        echo -e "\nManaged by changeish\n" >>"$file"
+        echo -e "\n[Managed by changeish](https://github.com/itlackey/changeish)\n" >>"$file"
     fi
 
     # Remove any double blank lines (two or more newlines in a row) and replace with a single blank line
@@ -647,9 +646,12 @@ extract_changelog_section() {
     local pattern="^##[[:space:]]*\\[?$esc_version\\]?"
     local start_line end_line
     start_line=$(grep -nE "$pattern" "$file" | head -n1 | cut -d: -f1)
+
     if [[ -z "$start_line" ]]; then
         echo ""
         return 0
+    else
+        start_line=$((start_line + 1)) # remove the header line
     fi
     end_line=$(tail -n +$((start_line + 1)) "$file" | grep -n '^## ' | head -n1 | cut -d: -f1)
     if [[ -n "$end_line" ]]; then
