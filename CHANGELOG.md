@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-### Features
+### Enhancements
 
 - Added `--include-pattern` and `--exclude-pattern` arguments:
    - These replace the old `--short-diff` argument for more flexible diff pattern matching.
@@ -229,3 +229,6 @@ Generated my changeish
 ### Fixes
 
 * Fixed an issue where the script does not append to the end of changelog if no existing sections are found.
+
+[Managed by changeish](https://github.com/itlackey/changeish)
+
