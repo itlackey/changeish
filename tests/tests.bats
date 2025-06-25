@@ -97,7 +97,7 @@ EOF
   # Mock curl to return a specific message
   mock_curl "dummy" "Hello! How can I assist you today?"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --generation-mode remote \
+  run "$CHANGEISH_SCRIPT" --model-provider remote \
     --api-url http://fake --api-model dummy --debug
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
@@ -228,7 +228,7 @@ EOF
 @test "Mode: explicit current" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "z" >file.txt
-  run "$CHANGEISH_SCRIPT" --current --save-history --generation-mode none
+  run "$CHANGEISH_SCRIPT" --current --save-history --model-provider none
   grep -q "Working Tree" history.md
 }
 
@@ -481,7 +481,7 @@ EOF
   export PATH="/usr/bin:/bin"
   rm -f bin/ollama
   echo "d" >d.txt && git add d.txt && git commit -m "d"
-  run "$CHANGEISH_SCRIPT" --current --generation-mode local --debug
+  run "$CHANGEISH_SCRIPT" --current --model-provider local --debug
   [ "$status" -eq 0 ]
   echo "$output" | grep -qi "ollama not found"
 }
@@ -496,7 +496,7 @@ EOF
   export PATH="$PWD/bin:$PATH"
   export CHANGEISH_MODEL=llama3
   echo "e" >e.txt && git add e.txt && git commit -m "e"
-  run "$CHANGEISH_SCRIPT" --current --generation-mode local --debug
+  run "$CHANGEISH_SCRIPT" --current --model-provider local --debug
   [ "$status" -eq 0 ]
   run grep -q -- "--verbose" ollama_args.txt
   [ "$status" -eq 0 ]
@@ -512,7 +512,7 @@ EOF
   chmod +x stubs/curl
   export PATH="$PWD/stubs:$PATH"
   unset CHANGEISH_API_KEY
-  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake --api-model gpt-mini
+  run "$CHANGEISH_SCRIPT" --model-provider remote --api-url http://fake --api-model gpt-mini
   [ "$status" -ne 0 ]
   echo "$output" | grep -q "CHANGEISH_API_KEY is not set"
 }
@@ -527,7 +527,7 @@ EOF
   chmod +x stubs/curl
   export PATH="$PWD/stubs:$PATH"
   export CHANGEISH_API_KEY="tok"
-  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-model gpt-mini
+  run "$CHANGEISH_SCRIPT" --model-provider remote --api-model gpt-mini
   [ "$status" -ne 0 ]
   echo "$output" | grep -q "no API URL provided"
 }
@@ -546,7 +546,7 @@ EOF
   generate_commits
   mock_curl "bar" ""
   export CHANGEISH_API_KEY="tok"
-  run "$CHANGEISH_SCRIPT" --to HEAD --generation-mode remote --api-url http://fake --model foo --api-model bar
+  run "$CHANGEISH_SCRIPT" --to HEAD --model-provider remote --api-url http://fake --model foo --api-model bar
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "bar"
 }
@@ -590,7 +590,7 @@ EOF
 
 @test "Generation mode: none skips changelog generation" {
   echo "a" >a.txt && git add a.txt && git commit -m "a"
-  run "$CHANGEISH_SCRIPT" --generation-mode none --save-history --save-prompt
+  run "$CHANGEISH_SCRIPT" --model-provider none --save-history --save-prompt
   [ "$status" -eq 0 ]
   [ -f history.md ]
   [ -f prompt.md ]
@@ -600,7 +600,7 @@ EOF
 @test "Generation mode: local forces local model" {
   echo "b" >b.txt && git add b.txt && git commit -m "b"
   mock_ollama "dummy" "LOCAL MODE"
-  run "$CHANGEISH_SCRIPT" --generation-mode local --save-history
+  run "$CHANGEISH_SCRIPT" --model-provider local --save-history
   [ "$status" -eq 0 ]
   grep -q "LOCAL MODE" CHANGELOG.md
 }
@@ -609,7 +609,7 @@ EOF
   echo "c" >c.txt && git add c.txt && git commit -m "c"
   mock_curl "dummy" "REMOTE MODE"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake --api-model dummy
+  run "$CHANGEISH_SCRIPT" --model-provider remote --api-url http://fake --api-model dummy
   [ "$status" -eq 0 ]
   grep -q "REMOTE MODE" CHANGELOG.md
 }
@@ -620,16 +620,16 @@ EOF
   rm -f bin/ollama
   mock_curl "dummy" "AUTO REMOTE"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --generation-mode auto --api-url http://fake --api-model dummy
+  run "$CHANGEISH_SCRIPT" --model-provider auto --api-url http://fake --api-model dummy
   [ "$status" -eq 0 ]
   grep -q "AUTO REMOTE" CHANGELOG.md
 }
 
 @test "Generation mode: unknown value aborts" {
   echo "e" >e.txt && git add e.txt && git commit -m "e"
-  run "$CHANGEISH_SCRIPT" --generation-mode doesnotexist
+  run "$CHANGEISH_SCRIPT" --model-provider doesnotexist
   [ "$status" -ne 0 ]
-  echo "$output" | grep -q "Unknown --generation-mode"
+  echo "$output" | grep -q "Unknown --model-provider"
 }
 
 @test "Update-mode: prepend inserts before existing section" {
@@ -736,7 +736,7 @@ EOF
   git add file.txt
 
   mock_ollama "dummy" "- feat: new version"
-  run "$CHANGEISH_SCRIPT" --generation-mode local \
+  run "$CHANGEISH_SCRIPT" --model-provider local \
     --update-mode auto --save-history --save-prompt
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
@@ -758,7 +758,7 @@ EOF
 
   mock_curl "dummy" "- fix: remote append"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --generation-mode remote --api-url http://fake \
+  run "$CHANGEISH_SCRIPT" --model-provider remote --api-url http://fake \
     --api-model dummy --update-mode append --section-name "v4.0.0" \
     --save-history --save-prompt
   [ "$status" -eq 0 ]

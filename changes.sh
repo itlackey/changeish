@@ -14,7 +14,7 @@
 #   --exclude-pattern P     Exclude files matching pattern P from full diff
 #   --todo-pattern P        Pattern for files to check for TODO changes (default: *todo*)
 #   --model MODEL           Specify the local Ollama model to use (default: qwen2.5-coder)
-#   --generation-mode MODE  Control how changelog is generated: auto (default), local, remote, none
+#   --model-provider MODE  Control how changelog is generated: auto (default), local, remote, none
 #   --api-model MODEL       Specify remote API model (overrides --model for remote usage)
 #   --api-url URL           Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH   Path to changelog file to update (default: ./CHANGELOG.md)
@@ -41,7 +41,7 @@
 #   # Include all history since start and write to custom changelog file:
 #   changeish --all --changelog-file ./docs/CHANGELOG.md
 #   # Use a remote API for generation:
-#   changeish --generation-mode remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
+#   changeish --model-provider remote --api-model gpt-4 --api-url https://api.example.com/v1/chat/completions
 #   # Only generate the prompt file:
 #   changeish --save-prompt
 #   # Use a custom config file:
@@ -81,7 +81,7 @@ api_url="${CHANGEISH_API_URL:-}"
 api_key="${CHANGEISH_API_KEY:-}"
 api_model="${CHANGEISH_API_MODEL:-}"
 default_todo_grep_pattern="TODO|FIX|ENHANCEMENT|DONE|CHORE|ADD"
-generation_mode="auto"
+model_provider="auto"
 update_mode="auto"
 section_name="auto"
 
@@ -734,8 +734,8 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         --available-releases) show_available_releases ;;
         --help) show_help ;;
         --version) show_version ;;
-        --generation-mode)
-            generation_mode="$2"
+        --model-provider)
+            model_provider="$2"
             shift 2
             ;;
         --make-prompt-template)
@@ -847,7 +847,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
 
     # Changelog generation logic
     should_generate_changelog=true
-    case "$generation_mode" in
+    case "$model_provider" in
     none)
         should_generate_changelog=false
         ;;
@@ -878,7 +878,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         fi
         ;;
     *)
-        echo "Unknown --generation-mode: $generation_mode" >&2
+        echo "Unknown --model-provider: $model_provider" >&2
         exit 1
         ;;
     esac
@@ -917,7 +917,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         echo "Remote mode: $remote"
         echo "API URL: $api_url"
         echo "API Model: $api_model"
-        echo "Generation mode: $generation_mode"
+        echo "Model provider: $model_provider"
         echo "Should generate changelog: $should_generate_changelog"
         echo "Changelog file: $changelog_file"
         echo "Prompt template: $prompt_template"
@@ -990,7 +990,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         fi
         generate_changelog "$model" "$changelog_file" "$section_name" "$update_mode" "$existing_changelog_section"
     else
-        echo "Changelog generation skipped. Use --generation-mode to enable it."
+        echo "Changelog generation skipped. Use --model-provider to enable it."
     fi
 
     # Cleanup: remove temp files if not saving them
