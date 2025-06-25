@@ -66,7 +66,6 @@ default_diff_options="--minimal --no-prefix --unified=0 --no-color -b -w --compa
 include_pattern=""
 exclude_pattern=""
 todo_pattern="*todo*"
-model="${CHANGEISH_MODEL:-qwen2.5-coder}"
 changelog_file="./CHANGELOG.md"
 prompt_template="./changelog_prompt.md"
 save_prompt=false
@@ -77,9 +76,6 @@ current_changes=false
 staged_changes=false
 outfile="history.md"
 remote=false
-api_url="${CHANGEISH_API_URL:-}"
-api_key="${CHANGEISH_API_KEY:-}"
-api_model="${CHANGEISH_API_MODEL:-}"
 default_todo_grep_pattern="TODO|FIX|ENHANCEMENT|DONE|CHORE|ADD"
 model_provider="auto"
 update_mode="auto"
@@ -94,7 +90,7 @@ Be sure to use only the information from the Git history in your response.
 Output rules
 1. Use only information from the Git history provided in the prompt.
 2. Output **ONLY** valid Markdown based on the format provided in these instructions.
-    - Do not include the ``` code block markers in your output.
+    - Do not include the \`\`\` code block markers in your output.
 3. Use this exact hierarchy:
    ### Enhancements
 
@@ -439,6 +435,11 @@ insert_changelog() {
         content="$content"$'\n'
     fi
 
+    # Write content to a temp file for awk to read
+    local content_file
+    content_file=$(mktemp)
+    printf '%s' "$content" > "$content_file"
+
     if [[ -n "$existing_changelog_section" ]]; then
         # Section exists
         case "$update_mode" in
@@ -453,9 +454,10 @@ insert_changelog() {
             else
                 end_line=$(wc -l <"$file")
             fi
-            awk -v start="$start_line" -v end="$end_line" -v version="$version" -v content="$content" '
+            awk -v start="$start_line" -v end="$end_line" -v version="$version" -v content_file="$content_file" '
+                function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
                 NR < start { print }
-                NR == start { print "## " version; print content }
+                NR == start { print "## " version; printf "%s", slurp(content_file) }
                 NR > end { print }
             ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
@@ -467,10 +469,11 @@ insert_changelog() {
                 echo "Section '$section_name' not found in $file" >&2
                 exit 1
             fi
-            awk -v insert_line="$start_line" -v content="$content" '
+            awk -v insert_line="$start_line" -v content_file="$content_file" '
+                function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
                 NR == insert_line {
                     print "## Current Changes"
-                    print content
+                    printf "%s", slurp(content_file)
                 }
                 { print }
             ' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
@@ -495,7 +498,7 @@ insert_changelog() {
             fi
             [[ "$debug" == true ]] && echo "End line for section '$section_name': $end_line"
             [[ "$debug" == true ]] && echo "Appending $content"
-            awk -v end="$end_line" -v content="$content" 'NR==end{print content;print; next}1' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
+            awk -v end="$end_line" -v content_file="$content_file" 'NR==end{print content_file;print; next}1' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
             ;;
         esac
     else
@@ -510,12 +513,12 @@ insert_changelog() {
             first_h1_line=$(grep -n '^# ' "$file" | head -n1 | cut -d: -f1 || true)
             [[ "$debug" == true ]] && echo "First H1 line: $first_h1_line"
             if [[ -n "$first_h1_line" ]]; then
-                awk -v line="$first_h1_line" -v version="$version" -v content="$content" '
+                awk -v line="$first_h1_line" -v version="$version" -v content_file="$content_file" '
                     NR==line {
                         print
                         print ""
                         print "## " version
-                        print content
+                        printf "%s", slurp(content_file)
                         next
                     }
                     { print }
@@ -528,6 +531,8 @@ insert_changelog() {
             ;;
         esac
     fi
+
+    rm -f "$content_file"
 
     # ──────────────────────────────────────────────────────────────────────────
     # Normalize headers:
@@ -573,10 +578,13 @@ insert_changelog() {
         echo -e "\n[Managed by changeish](https://github.com/itlackey/changeish)\n" >>"$file"
     fi
 
-    # Remove any double blank lines (two or more newlines in a row) and replace with a single blank line
-    # after all other processing
-    sed -i ':a;N;$!ba;s/\n\{3,\}/\n\n/g' "$file"
-
+    # Fix sed -i for macOS compatibility
+    if command -v gsed >/dev/null 2>&1; then
+        gsed -i ':a;N;$!ba;s/\n\{3,\}/\n\n/g' "$file"
+    else
+        # Remove any double blank lines (two or more newlines in a row) and replace with a single blank line
+        awk 'BEGIN{blank=0} {if ($0 ~ /^$/) {blank++; if (blank < 2) print $0} else {blank=0; print $0}}' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+    fi
 }
 
 # Extract the current version string from a version file
@@ -802,6 +810,11 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         source .env
     fi
 
+    model="${CHANGEISH_MODEL:-qwen2.5-coder}"
+    api_url="${CHANGEISH_API_URL:-}"
+    api_key="${CHANGEISH_API_KEY:-}"
+    api_model="${CHANGEISH_API_MODEL:-}"
+
     # Determine the file to track version changes
     found_version_file=""
     if [[ -n "$version_file" ]]; then
@@ -877,7 +890,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     local)
         remote=false
         ;;
-    remote)
+    remote|api)
         remote=true
         ;;
     auto)
