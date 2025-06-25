@@ -55,8 +55,7 @@
 #   CHANGEISH_API_URL     Default API URL for remote generation (overridden by --api-url)
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
-#set -euo pipefail
-set -e
+set -euo pipefail
 
 # Initialize default option values
 debug="false"
@@ -167,6 +166,7 @@ show_available_releases() {
 build_entry() {
     local label="$1"
     local diff_spec
+    local diff_args=()
     if [[ -n "$2" ]]; then
         diff_spec=("$2")
     else
@@ -261,7 +261,6 @@ build_entry() {
     echo >>"$outfile"
     echo "### Changes in files" >>"$outfile"
     # Prepare the diff arguments based on include/exclude patterns
-    diff_args=()
     if [[ -n "$include_pattern" ]]; then
         diff_args+=("*$include_pattern*")
     fi
@@ -277,7 +276,7 @@ build_entry() {
         #| grep -Ev '^(@|index |--- |\+\+\+ )' || true >>"$outfile"
     else
         # shellcheck disable=SC2086
-        git --no-pager diff $default_diff_options -- "${diff_args[@]}" >>"$outfile"
+        git --no-pager diff $default_diff_options >>"$outfile"
         #| grep -Ev '^(^@|^index |--- |\+\+\+ )' || true >>"$outfile"
     fi
     echo '```' >>"$outfile"
@@ -366,15 +365,16 @@ generate_remote() {
 
 generate_response() {
     local response
-    echo "Generating changelog using model: $model" >&2
     if $remote; then
         # Use remote API generation
         model="$api_model"
+        echo "Generating changelog using model: $model" >&2
         #echo "Running remote model '$model'..." >&2
         response="$(generate_remote "$model" "$prompt_file")"
     else
         # Use local Ollama model if available
         if command -v ollama >/dev/null 2>&1; then
+            echo "Generating changelog using model: $model" >&2
             #echo "Running Ollama model '$model'..." >&2
             response="$(run_ollama "$model" "$prompt_file")"
         else
@@ -438,7 +438,7 @@ insert_changelog() {
     # Write content to a temp file for awk to read
     local content_file
     content_file=$(mktemp)
-    printf '%s' "$content" > "$content_file"
+    printf '%s' "$content" >"$content_file"
 
     if [[ -n "$existing_changelog_section" ]]; then
         # Section exists
@@ -583,7 +583,7 @@ insert_changelog() {
         gsed -i ':a;N;$!ba;s/\n\{3,\}/\n\n/g' "$file"
     else
         # Remove any double blank lines (two or more newlines in a row) and replace with a single blank line
-        awk 'BEGIN{blank=0} {if ($0 ~ /^$/) {blank++; if (blank < 2) print $0} else {blank=0; print $0}}' "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        awk 'BEGIN{blank=0} {if ($0 ~ /^$/) {blank++; if (blank < 2) print $0} else {blank=0; print $0}}' "$file" >"${file}.tmp" && mv "${file}.tmp" "$file"
     fi
 }
 
@@ -890,7 +890,7 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
     local)
         remote=false
         ;;
-    remote|api)
+    remote | api)
         remote=true
         ;;
     auto)

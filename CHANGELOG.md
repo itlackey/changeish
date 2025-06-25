@@ -28,6 +28,7 @@
 - Normalized headers in `changes.sh` and added checks for duplicate headers, exactly one first-level heading, and correct spacing around headers.
 - Added tests to ensure that the changelog is correctly formatted.
 - Fixed sed -i for macOS compatibility.
+- Updated `changes.sh` to set `set -euo pipefail` for better error handling during script execution.
 
 ### Fixes
 
