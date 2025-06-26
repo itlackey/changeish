@@ -194,11 +194,13 @@ build_entry() {
             todo_diff=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
         fi
         if [ -n "$todo_diff" ]; then
-            echo "" >>"$outfile"
-            echo "### Changes in TODOs" >>"$outfile"
-            echo '```diff' >>"$outfile"
-            printf '%s\n' "$todo_diff" >>"$outfile"
-            echo '```' >>"$outfile"
+            {
+                echo ""
+                echo "### Changes in TODOs"
+                echo '```diff'
+                printf '%s\n' "$todo_diff"
+                echo '```'
+            } >>"$outfile"
         fi
     fi
 
@@ -215,40 +217,41 @@ build_entry() {
         fi
     fi
 
-    echo "" >>"$outfile"
-    echo "### Changes in files" >>"$outfile"
-    echo '```diff' >>"$outfile"
-    if [ -n "$include_pattern" ]; then
-        include_arg="*$include_pattern*"
-    fi
-    if [ -n "$exclude_pattern" ]; then
-        exclude_arg=":(exclude)*$exclude_pattern*"
-    fi
-
-    if [ -n "$diff_spec" ]; then
-        if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-            git --no-pager diff "$diff_spec" $default_diff_options "$include_arg" "$exclude_arg" >>"$outfile"
-        elif [ -n "$include_arg" ]; then
-            git --no-pager diff "$diff_spec" $default_diff_options "$include_arg" >>"$outfile"
-        elif [ -n "$exclude_arg" ]; then
-            git --no-pager diff "$diff_spec" $default_diff_options "$exclude_arg" >>"$outfile"
-        else
-            git --no-pager diff "$diff_spec" $default_diff_options >>"$outfile"
+    {
+        echo ""
+        echo "### Changes in files"
+        echo '```diff'
+        if [ -n "$include_pattern" ]; then
+            include_arg="*$include_pattern*"
         fi
-    else
-        if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-            git --no-pager diff $default_diff_options "$include_arg" "$exclude_arg" >>"$outfile"
-        elif [ -n "$include_arg" ]; then
-            git --no-pager diff $default_diff_options "$include_arg" >>"$outfile"
-        elif [ -n "$exclude_arg" ]; then
-            git --no-pager diff $default_diff_options "$exclude_arg" >>"$outfile"
-        else
-            git --no-pager diff $default_diff_options >>"$outfile"
+        if [ -n "$exclude_pattern" ]; then
+            exclude_arg=":(exclude)*$exclude_pattern*"
         fi
-    fi
-    echo '```' >>"$outfile"
 
-    echo "" >>"$outfile"
+        if [ -n "$diff_spec" ]; then
+            if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
+                git --no-pager diff "$diff_spec" $default_diff_options "$include_arg" "$exclude_arg"
+            elif [ -n "$include_arg" ]; then
+                git --no-pager diff "$diff_spec" $default_diff_options "$include_arg"
+            elif [ -n "$exclude_arg" ]; then
+                git --no-pager diff "$diff_spec" $default_diff_options "$exclude_arg"
+            else
+                git --no-pager diff "$diff_spec" $default_diff_options
+            fi
+        else
+            if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
+                git --no-pager diff $default_diff_options "$include_arg" "$exclude_arg"
+            elif [ -n "$include_arg" ]; then
+                git --no-pager diff $default_diff_options "$include_arg"
+            elif [ -n "$exclude_arg" ]; then
+                git --no-pager diff $default_diff_options "$exclude_arg"
+            else
+                git --no-pager diff $default_diff_options
+            fi
+        fi
+        echo '```'
+        echo ""
+    } >>"$outfile"
 
     if [ "$debug" = "true" ]; then
         echo "History output:" && cat "$outfile"
@@ -274,16 +277,21 @@ generate_prompt() {
     fi
 
     if [ -n "$gp_existing_section" ]; then
-        printf '\n5. Include ALL of the existing items from the "EXISTING CHANGELOG" in your response. DO NOT remove any existing items.\n' >>"$prompt_file"
-        printf '<<<END>>>\n<<<EXISTING CHANGELOG>>>\n' >>"$prompt_file"
-        printf '%s\n' "$gp_existing_section" >>"$prompt_file"
-        printf '<<<END>>>\n' >>"$prompt_file"
+        {
+            printf '\n5. Include ALL of the existing items from the "EXISTING CHANGELOG" in your response. DO NOT remove any existing items.\n'
+            printf '<<<END>>>\n<<<EXISTING CHANGELOG>>>\n'
+            printf '%s\n' "$gp_existing_section"
+            printf '<<<END>>>\n'
+        } >>"$prompt_file"
     else
         printf '\n<<<END>>>\n%s' "$example_changelog" >>"$prompt_file"
     fi
-    printf '\n<<<GIT HISTORY>>>\n' >>"$prompt_file"
-    cat "$gp_history_file" >>"$prompt_file"
-    printf '\n<<<END>>>\n' >>"$prompt_file"
+    {
+        printf '\n<<<GIT HISTORY>>>\n'
+        cat "$gp_history_file"
+        printf '\n<<<END>>>\n'
+    } >>"$prompt_file"
+
 }
 
 # Run the local Ollama model with the prompt file
@@ -319,13 +327,13 @@ generate_remote() {
     response=$(curl -s -X POST "$api_url" \
         -H "Authorization: Bearer $api_key" \
         -H "Content-Type: application/json" \
-        -d  "$body")
+        -d "$body")
 
     # if [ "$debug" = "true" ]; then
     #     echo "Response from remote API:" >&2
     #     echo "$response" >&2
     # fi
-   
+
     # Extract "content" value using awk to allow line breaks and special characters
     result=$(echo "$response" | awk 'BEGIN{RS="\"content\"";FS=":"} NR>1{match($0, /"([^"]|\\")*"/); val=substr($0, RSTART, RLENGTH); gsub(/^"/, "", val); gsub(/"$/, "", val); gsub(/\\"/, "\"", val); print val; exit}')
     echo "$result"
@@ -593,16 +601,16 @@ while [ $# -gt 0 ]; do
         shift
         ;;
     --update)
-        update        
+        update
         ;;
     --available-releases)
-        show_available_releases        
+        show_available_releases
         ;;
     --help)
         show_help
         ;;
     --version)
-        show_version        
+        show_version
         ;;
     --model-provider)
         model_provider="$2"
@@ -633,19 +641,20 @@ if [ -n "${make_prompt_template_path-}" ]; then
     exit 0
 fi
 
-
 CHANGEISH_API_URL=""
 CHANGEISH_API_KEY=""
 CHANGEISH_API_MODEL=""
 
 if [ -n "$config_file" ]; then
     if [ -f "$config_file" ]; then
+        # shellcheck disable=SC1090
         . "$config_file"
     else
         echo "Error: config file '$config_file' not found." >&2
         exit 1
     fi
 elif [ -f .env ]; then
+    # shellcheck disable=SC1091
     . .env
 fi
 
@@ -701,159 +710,168 @@ else
     prompt_file=$(mktemp)
 fi
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Error: Not a git repository. Please run this script inside a git repository." >&2
-    exit 1
-fi
-if ! git rev-parse HEAD >/dev/null 2>&1; then
-    echo "No commits found in repository. Nothing to show." >&2
-    exit 1
-fi
-
-if [ "$staged_changes" = "false" ] && [ "$all_history" = "false" ] && [ -z "$to_rev" ] && [ -z "$from_rev" ]; then
-    current_changes="true"
-fi
-
-should_generate_changelog="true"
-case "$model_provider" in
-none)
-    should_generate_changelog="false"
-    ;;
-local)
-    remote="false"
-    ;;
-remote | api)
-    remote="true"
-    ;;
-auto)
-    if ! command -v ollama >/dev/null 2>&1; then
-        if [ "$debug" = "true" ]; then
-            echo "ollama not found, falling back to remote API."
-        fi
-        remote="true"
-        if [ -z "$api_key" ]; then
-            echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
-            remote="false"
-            should_generate_changelog="false"
-        fi
-        if [ -z "$api_url" ]; then
-            echo "Warning: Falling back to remote but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
-            remote="false"
-            should_generate_changelog="false"
-        fi
+main() {
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        echo "Error: Not a git repository. Please run this script inside a git repository." >&2
+        exit 1
     fi
-    ;;
-*)
-    echo "Unknown --model-provider: $model_provider" >&2
-    exit 1
-    ;;
-esac
+    if ! git rev-parse HEAD >/dev/null 2>&1; then
+        echo "No commits found in repository. Nothing to show." >&2
+        exit 1
+    fi
 
-if [ "$should_generate_changelog" = "true" ]; then
-    case "$update_mode" in
-    auto | prepend | append | update) ;;
+    if [ "$staged_changes" = "false" ] && [ "$all_history" = "false" ] && [ -z "$to_rev" ] && [ -z "$from_rev" ]; then
+        current_changes="true"
+    fi
+
+    should_generate_changelog="true"
+    case "$model_provider" in
+    none)
+        should_generate_changelog="false"
+        ;;
+    local)
+        remote="false"
+        ;;
+    remote | api)
+        remote="true"
+        ;;
+    auto)
+        if ! command -v ollama >/dev/null 2>&1; then
+            if [ "$debug" = "true" ]; then
+                echo "ollama not found, falling back to remote API."
+            fi
+            remote="true"
+            if [ -z "$api_key" ]; then
+                echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
+                remote="false"
+                should_generate_changelog="false"
+            fi
+            if [ -z "$api_url" ]; then
+                echo "Warning: Falling back to remote but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+                remote="false"
+                should_generate_changelog="false"
+            fi
+        fi
+        ;;
     *)
-        echo "Error: --update-mode must be one of auto, prepend, append, update." >&2
+        echo "Unknown --model-provider: $model_provider" >&2
         exit 1
         ;;
     esac
-fi
 
-if [ "$remote" = "true" ]; then
-    if [ -z "$api_model" ]; then
-        api_model="$model"
+    if [ "$remote" = "true" ]; then
+        if [ -z "$api_model" ]; then
+            api_model="$model"
+        fi
+        if [ -z "$api_key" ]; then
+            echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
+            exit 1
+        fi
+        if [ -z "$api_url" ]; then
+            echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+            exit 1
+        fi
     fi
-    if [ -z "$api_key" ]; then
-        echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
-        exit 1
+
+    if [ "$should_generate_changelog" = "true" ]; then
+        case "$update_mode" in
+        auto | prepend | append | update) ;;
+        *)
+            echo "Error: --update-mode must be one of auto, prepend, append, update." >&2
+            exit 1
+            ;;
+        esac
     fi
-    if [ -z "$api_url" ]; then
-        echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
-        exit 1
+
+    # if [ -n "$CHANGEISH_MODEL" ] && [ "$model" = "qwen2.5-coder" ]; then
+    #     model="$CHANGEISH_MODEL"
+    # fi
+
+    if [ "$debug" = "true" ]; then
+        echo "## Settings"
+        echo "Debug mode enabled."
+        echo "Using model: $model"
+        echo "Remote mode: $remote"
+        echo "API URL: $api_url"
+        echo "API Model: $api_model"
+        echo "Model provider: $model_provider"
+        echo "Should generate changelog: $should_generate_changelog"
+        echo "Changelog file: $changelog_file"
+        echo "Prompt template: $prompt_template"
+        echo "Version file: $found_version_file"
+        echo "All history: $all_history"
+        echo "Current changes: $current_changes"
+        echo "Staged changes: $staged_changes"
+        echo "Save prompt: $save_prompt"
+        echo "Save history: $save_history"
+        echo "Include pattern: $include_pattern"
+        echo "Exclude pattern: $exclude_pattern"
+        echo "TODO pattern: $todo_pattern"
+        echo "TODO grep pattern: $default_todo_grep_pattern"
+        echo "## End Settings"
     fi
-fi
 
-# if [ -n "$CHANGEISH_MODEL" ] && [ "$model" = "qwen2.5-coder" ]; then
-#     model="$CHANGEISH_MODEL"
-# fi
-
-if [ "$debug" = "true" ]; then
-    echo "## Settings"
-    echo "Debug mode enabled."
-    echo "Using model: $model"
-    echo "Remote mode: $remote"
-    echo "API URL: $api_url"
-    echo "API Model: $api_model"
-    echo "Model provider: $model_provider"
-    echo "Should generate changelog: $should_generate_changelog"
-    echo "Changelog file: $changelog_file"
-    echo "Prompt template: $prompt_template"
-    echo "Version file: $found_version_file"
-    echo "All history: $all_history"
-    echo "Current changes: $current_changes"
-    echo "Staged changes: $staged_changes"
-    echo "Save prompt: $save_prompt"
-    echo "Save history: $save_history"
-    echo "Include pattern: $include_pattern"
-    echo "Exclude pattern: $exclude_pattern"
-    echo "TODO pattern: $todo_pattern"
-    echo "TODO grep pattern: $default_todo_grep_pattern"
-    echo "## End Settings"
-fi
-
-if [ "$current_changes" = "true" ]; then
-    build_entry "Working Tree" ""
-    echo "Generated git history for uncommitted changes in $outfile."
-elif [ "$staged_changes" = "true" ]; then
-    build_entry "Staged Changes" "--cached"
-    echo "Generated git history for staged changes in $outfile."
-else
-    if [ -z "$to_rev" ]; then to_rev="HEAD"; fi
-    if [ -z "$from_rev" ]; then from_rev="HEAD"; fi
-    if [ "$all_history" = "true" ]; then
-        echo "Using commit range: --all (all history)"
-        commits_list=$(git rev-list --reverse --all)
+    if [ "$current_changes" = "true" ]; then
+        build_entry "Working Tree" ""
+        echo "Generated git history for uncommitted changes in $outfile."
+    elif [ "$staged_changes" = "true" ]; then
+        build_entry "Staged Changes" "--cached"
+        echo "Generated git history for staged changes in $outfile."
     else
-        range_spec="${to_rev}^..${from_rev}"
-        echo "Using commit range: ${range_spec}"
-        commits_list=$(git rev-list --reverse "${range_spec}")
-    fi
-    if [ -z "$commits_list" ]; then
-        echo "No commits found in range ${range_spec}" >&2
-        exit 1
-    fi
-    start_commit=$(echo "$commits_list" | head -1)
-    end_commit=$(echo "$commits_list" | tail -1)
-    start_date=$(git show -s --format=%ci "$start_commit")
-    end_date=$(git show -s --format=%ci "$end_commit")
-    total_commits=$(echo "$commits_list" | wc -l)
-    echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
-    OLDIFS="$IFS"
-    IFS='
+        if [ -z "$to_rev" ]; then to_rev="HEAD"; fi
+        if [ -z "$from_rev" ]; then from_rev="HEAD"; fi
+        if [ "$all_history" = "true" ]; then
+            echo "Using commit range: --all (all history)"
+            commits_list=$(git rev-list --reverse --all)
+        else
+            range_spec="${to_rev}^..${from_rev}"
+            echo "Using commit range: ${range_spec}"
+            commits_list=$(git rev-list --reverse "${range_spec}")
+        fi
+        if [ -z "$commits_list" ]; then
+            echo "No commits found in range ${range_spec}" >&2
+            exit 1
+        fi
+        start_commit=$(echo "$commits_list" | head -1)
+        end_commit=$(echo "$commits_list" | tail -1)
+        start_date=$(git show -s --format=%ci "$start_commit")
+        end_date=$(git show -s --format=%ci "$end_commit")
+        total_commits=$(echo "$commits_list" | wc -l)
+        echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
+        OLDIFS="$IFS"
+        IFS='
 '
-    for commit in $commits_list; do
-        build_entry "$commit" "$commit^!"
-    done
-    IFS="$OLDIFS"
-    echo "Generated git history in $outfile."
-fi
-
-generate_prompt "$outfile" "$prompt_template" "$existing_changelog_section"
-
-if [ "$should_generate_changelog" = "true" ]; then
-    if [ ! -f "$changelog_file" ]; then
-        echo "Creating new changelog file: $changelog_file"
-        echo "# Changelog" >"$changelog_file"
-        echo "" >>"$changelog_file"
+        for commit in $commits_list; do
+            build_entry "$commit" "$commit^!"
+        done
+        IFS="$OLDIFS"
+        echo "Generated git history in $outfile."
     fi
-    generate_changelog "$model" "$changelog_file" "$section_name" "$update_mode" "$existing_changelog_section"
-else
-    echo "Changelog generation skipped. Use --model-provider to enable it."
-fi
 
-if [ "$save_history" != "true" ]; then
-    rm -f "$outfile"
-fi
-if [ "$save_prompt" != "true" ]; then
-    rm -f "$prompt_file"
-fi
+    generate_prompt "$outfile" "$prompt_template" "$existing_changelog_section"
+
+    if [ "$should_generate_changelog" = "true" ]; then
+        if [ ! -f "$changelog_file" ]; then
+            echo "Creating new changelog file: $changelog_file"
+            echo "# Changelog" >"$changelog_file"
+            echo "" >>"$changelog_file"
+        fi
+        generate_changelog "$model" "$changelog_file" "$section_name" "$update_mode" "$existing_changelog_section"
+    else
+        echo "Changelog generation skipped. Use --model-provider to enable it."
+    fi
+
+    if [ "$save_history" != "true" ]; then
+        rm -f "$outfile"
+    fi
+    if [ "$save_prompt" != "true" ]; then
+        rm -f "$prompt_file"
+    fi
+}
+
+# Only run main if this script is executed, not sourced
+case "${0##*/}" in
+    changes.sh)
+        main
+        ;;
+esac
