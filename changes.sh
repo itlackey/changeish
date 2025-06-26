@@ -55,7 +55,7 @@
 #   CHANGEISH_API_URL     Default API URL for remote generation (overridden by --api-url)
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
-set -eu
+#set -eu
 
 # Initialize default option values
 debug="false"
@@ -307,17 +307,27 @@ run_ollama() {
 generate_remote() {
     remote_model="$1"
     prompt_path="$2"
-    message=$(cat "$prompt_path")
+    # Read the prompt file as plain text
+    content=$(cat "$prompt_path")
+    # Build JSON with plain text content (escaped for JSON)
+    # json_payload=$(jq -n --arg model "$remote_model" --arg content "$content" \
+    #     '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
+
+    body=$(jq -n --arg model "$remote_model" --arg content "$content" \
+        '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
+    # echo "Request body: $body" >&2
     response=$(curl -s -X POST "$api_url" \
         -H "Authorization: Bearer $api_key" \
         -H "Content-Type: application/json" \
-        -d "$(jq -n --arg model "$remote_model" --arg content "$message" \
-            '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')")
-    result=$(echo "$response" | jq -r '.choices[-1].message.content')
-    if [ "$debug" = "true" ]; then
-        echo "Response from remote API:" >&2
-        echo "$response" | jq . >&2
-    fi
+        -d  "$body")
+
+    # if [ "$debug" = "true" ]; then
+    #     echo "Response from remote API:" >&2
+    #     echo "$response" >&2
+    # fi
+   
+    # Extract "content" value using awk to allow line breaks and special characters
+    result=$(echo "$response" | awk 'BEGIN{RS="\"content\"";FS=":"} NR>1{match($0, /"([^"]|\\")*"/); val=substr($0, RSTART, RLENGTH); gsub(/^"/, "", val); gsub(/"$/, "", val); gsub(/\\"/, "\"", val); print val; exit}')
     echo "$result"
 }
 
@@ -365,58 +375,52 @@ insert_changelog() {
     ic_esc_version=$(echo "$ic_version" | sed 's/[][\\/.*^$]/\\&/g')
     ic_pattern="^##[[:space:]]*\[?$ic_esc_version\]?"
     ic_content=$(printf '%s\n' "$ic_content")
-    ic_content_file=$(mktemp)
+    ic_content_file=$(mktemp 2>/dev/null || mktemp -t ic_content_file)
     printf '%s' "$ic_content" >"$ic_content_file"
 
     if [ -n "$ic_existing_section" ]; then
         case "$ic_mode" in
         update | auto)
-            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -n1 | cut -d: -f1)
-            ic_next=$(tail -n +"$((ic_start_line + 1))" "$ic_file" | grep -n '^## ' | head -n1 | cut -d: -f1)
+            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -1 | cut -d: -f1)
+            ic_next=$(tail -n "+$((ic_start_line + 1))" "$ic_file" | grep -n '^## ' | head -1 | cut -d: -f1)
             if [ -n "$ic_next" ]; then
                 ic_end_line=$((ic_start_line + ic_next - 1))
             else
                 ic_end_line=$(wc -l <"$ic_file")
             fi
-            awk -v start="$ic_start_line" -v end="$ic_end_line" -v version="$ic_version" -v content_file="$ic_content_file" '
-                    function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
-                    NR < start { print }
-                    NR == start { print "## " version; printf "%s", slurp(content_file) }
-                    NR > end { print }
-                ' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
+            # POSIX: Use sed to insert file contents
+            sed "${ic_start_line},${ic_end_line}d" "$ic_file" >"${ic_file}.tmp"
+            awk 'NR == $0 {print}' "${ic_file}.tmp" >"${ic_file}.tmp2" # no-op, just to keep structure
+            mv "${ic_file}.tmp" "$ic_file"
+            sed -i '' "${ic_start_line}i\\
+## $ic_version
+" "$ic_file"
+            sed -i '' "$((ic_start_line + 1))r $ic_content_file" "$ic_file"
             ;;
         prepend)
-            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -n1 | cut -d: -f1)
+            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -1 | cut -d: -f1)
             if [ -z "$ic_start_line" ]; then
                 echo "Section '$ic_section_name' not found in $ic_file" >&2
                 exit 1
             fi
-            awk -v insert_line="$ic_start_line" -v content_file="$ic_content_file" '
-                    function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
-                    NR == insert_line {
-                        print "## Current Changes"
-                        printf "%s", slurp(content_file)
-                    }
-                    { print }
-                ' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
+            sed -i '' "${ic_start_line}i\
+## Current Changes\
+" "$ic_file"
+            sed -i '' "$((ic_start_line + 1))r $ic_content_file" "$ic_file"
             ;;
         append)
-            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -n1 | cut -d: -f1)
+            ic_start_line=$(grep -nE "$ic_pattern" "$ic_file" | head -1 | cut -d: -f1)
             if [ -z "$ic_start_line" ]; then
                 echo "Section '$ic_section_name' not found in $ic_file" >&2
                 exit 1
             fi
-            ic_next=$(tail -n +"$((ic_start_line + 1))" "$ic_file" | grep -n '^## ' | head -n1 | cut -d: -f1)
+            ic_next=$(tail -n "+$((ic_start_line + 1))" "$ic_file" | grep -n '^## ' | head -1 | cut -d: -f1)
             if [ -n "$ic_next" ]; then
                 ic_end_line=$((ic_start_line + ic_next - 1))
             else
                 ic_end_line=$(wc -l <"$ic_file")
             fi
-            awk -v end="$ic_end_line" -v content_file="$ic_content_file" '
-                    function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
-                    NR == end { printf "%s", slurp(content_file) }
-                    { print }
-                ' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
+            sed -i '' "$((ic_end_line))r $ic_content_file" "$ic_file"
             ;;
         esac
     else
@@ -427,19 +431,10 @@ insert_changelog() {
             printf '%s\n' "$ic_content" >>"$ic_file"
             ;;
         update | auto | prepend)
-            ic_first_h1=$(grep -n '^# ' "$ic_file" | head -n1 | cut -d: -f1)
+            ic_first_h1=$(grep -n '^# ' "$ic_file" | head -1 | cut -d: -f1)
             if [ -n "$ic_first_h1" ]; then
-                awk -v line="$ic_first_h1" -v version="$ic_version" -v content_file="$ic_content_file" '
-                        function slurp(file,   l, s) { while ((getline l < file) > 0) s = s l "\n"; close(file); return s }
-                        NR == line {
-                            print
-                            print ""
-                            print "## " version
-                            printf "%s", slurp(content_file)
-                            next
-                        }
-                        { print }
-                    ' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
+                # Insert after first H1
+                awk 'NR == line {print; print ""; print "## '"$ic_version"'"; system("cat '"$ic_content_file"'"); next} {print}' line="$ic_first_h1" "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
             else
                 printf "## %s\n" "$ic_version" >>"$ic_file"
                 printf '%s\n' "$ic_content" >>"$ic_file"
@@ -450,49 +445,11 @@ insert_changelog() {
 
     rm -f "$ic_content_file"
 
-    awk '
-    BEGIN { prev = "" }
-    {
-        if ($0 ~ /^# /) {
-            if (!seen1[$0]++) {
-                if (prev != "") print ""
-                print
-                print ""
-                prev = ""
-            }
-        }
-        else if ($0 ~ /^## /) {
-            if (!seen2[$0]++) {
-                if (prev != "") print ""
-                print
-                print ""
-                prev = ""
-            }
-        }
-        else if ($0 ~ /^###/) {
-            if (prev != "") print ""
-            print
-            print ""
-            prev = ""
-        }
-        else {
-            print
-            prev = $0
-        }
-    }
-    ' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
+    # Remove duplicate blank lines (POSIX sed)
+    sed '/^$/N;/^\n$/D' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
 
-    if ! tail -n5 "$ic_file" | grep -q "Managed by changeish"; then
+    if ! tail -n 5 "$ic_file" | grep -q "Managed by changeish"; then
         printf '\n[Managed by changeish](https://github.com/itlackey/changeish)\n\n' >>"$ic_file"
-    fi
-
-    if command -v gsed >/dev/null 2>&1; then
-        gsed -i ':a;N;$!ba;s/\n\{3,\}/\n\n/g' "$ic_file"
-    else
-        awk 'BEGIN{blank=0} {
-            if ($0 ~ /^$/) { blank++; if (blank < 2) print $0 }
-            else { blank=0; print $0 }
-        }' "$ic_file" >"${ic_file}.tmp" && mv "${ic_file}.tmp" "$ic_file"
     fi
 }
 
@@ -503,28 +460,28 @@ get_current_version_from_file() {
         return 1
     fi
     if [ "$file" = "changes.sh" ]; then
-        version=$(grep -Eo 'Version: [0-9]+\.[0-9]+(\.[0-9]+)?' "$file" | head -n3 | grep -Eo 'v?[0-9]+\.[0-9]+(\.[0-9]+)?')
+        version=$(grep -E 'Version: [0-9]+\.[0-9]+(\.[0-9]+)?' "$file" | head -1 | sed -n 's/.*Version: \(v\?[0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
         if [ -n "$version" ]; then
             echo "$version"
             return 0
         fi
     fi
-    version=$(grep -Eo 'version[[:space:]]*[:=][[:space:]]*["'"'"']?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -n1 | grep -Eo '([0-9]+\.[0-9]+(\.[0-9]+)?)')
+    version=$(grep -E 'version[[:space:]]*[:=][[:space:]]*["]?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*version[[:space:]]*[:=][[:space:]]*\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
     if [ -n "$version" ]; then
         echo "$version"
         return 0
     fi
-    version=$(grep -Eo '__version__[[:space:]]*=[[:space:]]*["'"'"']([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -n1 | grep -Eo '([0-9]+\.[0-9]+(\.[0-9]+)?)')
+    version=$(grep -E '__version__[[:space:]]*=[[:space:]]*["]([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*__version__[[:space:]]*=[[:space:]]*"\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\)".*/\1/p')
     if [ -n "$version" ]; then
         echo "$version"
         return 0
     fi
-    version=$(grep -Eo '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+(\.[0-9]+)?"' "$file" | head -n1 | grep -Eo '([0-9]+\.[0-9]+(\.[0-9]+)?)')
+    version=$(grep -E '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+(\.[0-9]+)?"' "$file" | head -1 | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\)".*/\1/p')
     if [ -n "$version" ]; then
         echo "$version"
         return 0
     fi
-    version=$(grep -Eo '[vV]?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -n1 | grep -Eo '([0-9]+\.[0-9]+(\.[0-9]+)?)')
+    version=$(grep -E '[vV]?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
     if [ -n "$version" ]; then
         echo "$version"
         return 0
@@ -865,8 +822,8 @@ else
         echo "No commits found in range ${range_spec}" >&2
         exit 1
     fi
-    start_commit=$(echo "$commits_list" | head -n1)
-    end_commit=$(echo "$commits_list" | tail -n1)
+    start_commit=$(echo "$commits_list" | head -1)
+    end_commit=$(echo "$commits_list" | tail -1)
     start_date=$(git show -s --format=%ci "$start_commit")
     end_date=$(git show -s --format=%ci "$end_commit")
     total_commits=$(echo "$commits_list" | wc -l)
