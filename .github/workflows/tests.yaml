@@ -41,21 +41,21 @@ jobs:
     needs: setup-shells
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v3        
       - uses: bats-core/bats-action@3.0.1
       - name: Run Bats
         shell: bash
-        run: bats test/**/*.bats
+        run: bats tests/*.bats
 
   shell_syntax_checks:
-    name: Syntax & Cross‑Shell Checks
+    name: Syntax & Cross-Shell Checks
     needs: setup-shells
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
       - name: Install ShellCheck
-        uses: ludeeus/action-shellcheck@v1
+        uses: ludeeus/action-shellcheck@master
 
       - name: Run ShellCheck (POSIX)
         run: shellcheck --shell=sh changeish.sh
