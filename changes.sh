@@ -167,10 +167,12 @@ build_entry() {
     include_arg=""
     exclude_arg=""
     if [ -n "$2" ]; then
-        diff_spec="$2"
+        diff_spec=$2
     fi
 
     echo "Building entry for: $label"
+    echo "Diff spec: '$diff_spec'"
+
     echo "## $label" >>"$outfile"
 
     case "$diff_spec" in
@@ -183,6 +185,8 @@ build_entry() {
         echo '```' >>"$outfile"
         ;;
     esac
+
+    printf 'Set header\n'
 
     if [ "$debug" = "true" ]; then
         git --no-pager diff --unified=0 -- "*todo*"
@@ -204,6 +208,8 @@ build_entry() {
         fi
     fi
 
+    printf 'Set todo diff\n'
+
     if [ -n "$include_pattern" ]; then
         if ! git ls-files -- "*$include_pattern*" >/dev/null 2>&1; then
             echo "Error: Invalid --include-pattern '$include_pattern' (no matching files or invalid pattern)." >&2
@@ -216,29 +222,39 @@ build_entry() {
             exit 1
         fi
     fi
+    if [ -n "$include_pattern" ]; then
+        include_arg="*$include_pattern*"
+    fi
+    if [ -n "$exclude_pattern" ]; then
+        exclude_arg=":(exclude)*$exclude_pattern*"
+    fi
 
+    printf 'Set include/exclude args: %s\n' "$include_arg $exclude_arg"
+
+    printf 'diff options: %s\n' "$default_diff_options"
     {
         echo ""
         echo "### Changes in files"
         echo '```diff'
-        if [ -n "$include_pattern" ]; then
-            include_arg="*$include_pattern*"
-        fi
-        if [ -n "$exclude_pattern" ]; then
-            exclude_arg=":(exclude)*$exclude_pattern*"
-        fi
 
         if [ -n "$diff_spec" ]; then
+            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options">&2
             if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
+                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
                 git --no-pager diff "$diff_spec" $default_diff_options "$include_arg" "$exclude_arg"
             elif [ -n "$include_arg" ]; then
+                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
                 git --no-pager diff "$diff_spec" $default_diff_options "$include_arg"
             elif [ -n "$exclude_arg" ]; then
+                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
                 git --no-pager diff "$diff_spec" $default_diff_options "$exclude_arg"
             else
-                git --no-pager diff "$diff_spec" $default_diff_options
+                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
+                git --no-pager diff "${diff_spec}" "$default_diff_options"
             fi
         else
+            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options">&2
+
             if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
                 git --no-pager diff $default_diff_options "$include_arg" "$exclude_arg"
             elif [ -n "$include_arg" ]; then
@@ -246,7 +262,7 @@ build_entry() {
             elif [ -n "$exclude_arg" ]; then
                 git --no-pager diff $default_diff_options "$exclude_arg"
             else
-                git --no-pager diff $default_diff_options
+                git --no-pager diff --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no
             fi
         fi
         echo '```'
@@ -523,194 +539,200 @@ extract_changelog_section() {
     sed -n "${start_line},${end_line}p" "$ecs_file"
 }
 
-config_file=""
-model="qwen2.5-coder"
+main() {
 
-while [ $# -gt 0 ]; do
-    case "$1" in
-    --from)
-        from_rev="$2"
-        shift 2
-        ;;
-    --to)
-        to_rev="$2"
-        shift 2
-        ;;
-    --include-pattern)
-        include_pattern="$2"
-        shift 2
-        ;;
-    --exclude-pattern)
-        exclude_pattern="$2"
-        shift 2
-        ;;
-    --todo-pattern)
-        todo_pattern="$2"
-        shift 2
-        ;;
-    --model)
-        model="$2"
-        shift 2
-        ;;
-    --api-model)
-        api_model="$2"
-        shift 2
-        ;;
-    --api-url)
-        api_url="$2"
-        shift 2
-        ;;
-    --config-file)
-        config_file="$2"
-        shift 2
-        ;;
-    --changelog-file)
-        changelog_file="$2"
-        shift 2
-        ;;
-    --prompt-template)
-        prompt_template="$2"
-        shift 2
-        ;;
-    --save-prompt)
-        save_prompt="true"
-        shift
-        ;;
-    --save-history)
-        save_history="true"
-        shift
-        ;;
-    --version-file)
-        version_file="$2"
-        shift 2
-        ;;
-    --current)
-        current_changes="true"
-        shift
-        ;;
-    --staged)
-        staged_changes="true"
-        shift
-        ;;
-    --all)
-        all_history="true"
-        shift
-        ;;
-    --debug)
-        debug="true"
-        shift
-        ;;
-    --update)
-        update
-        ;;
-    --available-releases)
-        show_available_releases
-        ;;
-    --help)
-        show_help
-        ;;
-    --version)
-        show_version
-        ;;
-    --model-provider)
-        model_provider="$2"
-        shift 2
-        ;;
-    --make-prompt-template)
-        make_prompt_template_path="$2"
-        shift 2
-        ;;
-    --update-mode)
-        update_mode="$2"
-        shift 2
-        ;;
-    --section-name)
-        section_name="$2"
-        shift 2
-        ;;
-    *)
-        echo "Unknown arg: $1" >&2
-        exit 1
-        ;;
-    esac
-done
-
-if [ -n "${make_prompt_template_path-}" ]; then
-    printf '%s\n' "$default_prompt" >"$make_prompt_template_path"
-    echo "Default prompt template written to $make_prompt_template_path."
-    exit 0
-fi
-
-CHANGEISH_API_URL=""
-CHANGEISH_API_KEY=""
-CHANGEISH_API_MODEL=""
-
-if [ -n "$config_file" ]; then
-    if [ -f "$config_file" ]; then
-        # shellcheck disable=SC1090
-        . "$config_file"
-    else
-        echo "Error: config file '$config_file' not found." >&2
-        exit 1
+    if [ "$(basename -- "$0")" = "changes.sh" ]; then
+        set -eu
     fi
-elif [ -f .env ]; then
-    # shellcheck disable=SC1091
-    . .env
-fi
+    config_file=""
+    model="qwen2.5-coder"
+    model_set="false"
 
-if [ -z "$model" ] && [ -n "$CHANGEISH_API_MODEL" ]; then
-    model="${CHANGEISH_MODEL}"
-fi
-
-api_url="${CHANGEISH_API_URL:-}"
-api_key="${CHANGEISH_API_KEY:-}"
-api_model="${CHANGEISH_API_MODEL:-}"
-
-found_version_file=""
-if [ -n "$version_file" ]; then
-    if [ -f "$version_file" ]; then
-        found_version_file="$version_file"
-    else
-        echo "Error: Specified version file '$version_file' does not exist." >&2
-        exit 1
-    fi
-else
-    for vf in $default_version_files; do
-        if [ -f "$vf" ]; then
-            found_version_file="$vf"
-            break
-        fi
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --from)
+            from_rev="$2"
+            shift 2
+            ;;
+        --to)
+            to_rev="$2"
+            shift 2
+            ;;
+        --include-pattern)
+            include_pattern="$2"
+            shift 2
+            ;;
+        --exclude-pattern)
+            exclude_pattern="$2"
+            shift 2
+            ;;
+        --todo-pattern)
+            todo_pattern="$2"
+            shift 2
+            ;;
+        --model)
+            model="$2"
+            model_set="true"
+            shift 2
+            ;;
+        --api-model)
+            api_model="$2"
+            shift 2
+            ;;
+        --api-url)
+            api_url="$2"
+            shift 2
+            ;;
+        --config-file)
+            config_file="$2"
+            shift 2
+            ;;
+        --changelog-file)
+            changelog_file="$2"
+            shift 2
+            ;;
+        --prompt-template)
+            prompt_template="$2"
+            shift 2
+            ;;
+        --save-prompt)
+            save_prompt="true"
+            shift
+            ;;
+        --save-history)
+            save_history="true"
+            shift
+            ;;
+        --version-file)
+            version_file="$2"
+            shift 2
+            ;;
+        --current)
+            current_changes="true"
+            shift
+            ;;
+        --staged)
+            staged_changes="true"
+            shift
+            ;;
+        --all)
+            all_history="true"
+            shift
+            ;;
+        --debug)
+            debug="true"
+            shift
+            ;;
+        --update)
+            update
+            ;;
+        --available-releases)
+            show_available_releases
+            ;;
+        --help)
+            show_help
+            ;;
+        --version)
+            show_version
+            ;;
+        --model-provider)
+            model_provider="$2"
+            shift 2
+            ;;
+        --make-prompt-template)
+            make_prompt_template_path="$2"
+            shift 2
+            ;;
+        --update-mode)
+            update_mode="$2"
+            shift 2
+            ;;
+        --section-name)
+            section_name="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown arg: $1" >&2
+            exit 1
+            ;;
+        esac
     done
-fi
 
-if [ -z "$section_name" ] || [ "$section_name" = "auto" ]; then
-    if [ -n "$found_version_file" ]; then
-        current_version=$(get_current_version_from_file "$found_version_file")
-        if [ -n "$current_version" ]; then
-            section_name="$current_version"
+    if [ -n "${make_prompt_template_path-}" ]; then
+        printf '%s\n' "$default_prompt" >"$make_prompt_template_path"
+        echo "Default prompt template written to $make_prompt_template_path."
+        exit 0
+    fi
+
+    # CHANGEISH_API_URL=""
+    # CHANGEISH_API_KEY=""
+    # CHANGEISH_API_MODEL=""
+
+    if [ -n "$config_file" ]; then
+        if [ -f "$config_file" ]; then
+            # shellcheck disable=SC1090
+            . "$config_file"
+        else
+            echo "Error: config file '$config_file' not found." >&2
+            exit 1
+        fi
+    elif [ -f .env ]; then
+        # shellcheck disable=SC1091
+        . .env
+    fi
+
+    if [ "$model_set" = "false" ] && [ -n "${CHANGEISH_MODEL+x}" ] && [ -n "$CHANGEISH_MODEL" ]; then
+        model="$CHANGEISH_MODEL"
+    fi
+
+    api_key="${CHANGEISH_API_KEY:-}"
+    api_url="${api_url:-CHANGEISH_API_URL:-}"
+    api_model="${api_model:-CHANGEISH_API_MODEL:-}"
+
+    found_version_file=""
+    if [ -n "$version_file" ]; then
+        if [ -f "$version_file" ]; then
+            found_version_file="$version_file"
+        else
+            echo "Error: Specified version file '$version_file' does not exist." >&2
+            exit 1
+        fi
+    else
+        for vf in $default_version_files; do
+            if [ -f "$vf" ]; then
+                found_version_file="$vf"
+                break
+            fi
+        done
+    fi
+
+    if [ -z "$section_name" ] || [ "$section_name" = "auto" ]; then
+        if [ -n "$found_version_file" ]; then
+            current_version=$(get_current_version_from_file "$found_version_file")
+            if [ -n "$current_version" ]; then
+                section_name="$current_version"
+            else
+                section_name="Current Changes"
+            fi
         else
             section_name="Current Changes"
         fi
-    else
-        section_name="Current Changes"
     fi
-fi
-echo "Using section name: $section_name"
+    echo "Using section name: $section_name"
 
-existing_changelog_section=$(extract_changelog_section "$section_name" "$changelog_file")
+    existing_changelog_section=$(extract_changelog_section "$section_name" "$changelog_file")
 
-if [ "$save_history" = "true" ]; then
-    outfile="history.md"
-else
-    outfile=$(mktemp)
-fi
-if [ "$save_prompt" = "true" ]; then
-    prompt_file="prompt.md"
-else
-    prompt_file=$(mktemp)
-fi
+    if [ "$save_history" = "true" ]; then
+        outfile="history.md"
+    else
+        outfile=$(mktemp)
+    fi
+    if [ "$save_prompt" = "true" ]; then
+        prompt_file="prompt.md"
+    else
+        prompt_file=$(mktemp)
+    fi
 
-main() {
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
         echo "Error: Not a git repository. Please run this script inside a git repository." >&2
         exit 1
@@ -842,7 +864,7 @@ main() {
         IFS='
 '
         for commit in $commits_list; do
-            build_entry "$commit" "$commit^!"
+            build_entry "$commit" "$commit"
         done
         IFS="$OLDIFS"
         echo "Generated git history in $outfile."
@@ -869,9 +891,7 @@ main() {
     fi
 }
 
-# Only run main if this script is executed, not sourced
-case "${0##*/}" in
-    changes.sh)
-        main
-        ;;
-esac
+# Only run main if this script is executed, not sourced (POSIX compatible)
+if [ "$(basename -- "$0")" = "changes.sh" ]; then
+    main "$@"
+fi

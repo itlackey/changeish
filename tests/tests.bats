@@ -246,7 +246,7 @@ EOF
 
 @test "Mode: all" {
   generate_commits
-  run "$CHANGEISH_SCRIPT" --all --save-history
+  run "$CHANGEISH_SCRIPT" --all --save-history --debug
   cat history.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
   echo "Checking all commits" >>$ERROR_LOG
