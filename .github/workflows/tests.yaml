@@ -1,0 +1,76 @@
+name: Shell Compatibility & Bats CI
+
+on:
+  push:
+    branches: [main, dev/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  setup-shells:
+    name: Setup shells
+    runs-on: ubuntu-latest
+    outputs:
+      dash_installed: ${{ steps.install-dash.outputs.installed }}
+      zsh_installed: ${{ steps.install-zsh.outputs.installed }}
+    steps:
+      - name: Ensure dash (and ash) is installed
+        id: install-dash
+        run: |
+          if ! command -v dash >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y dash
+            echo "::set-output name=installed::true"
+          else
+            echo "::set-output name=installed::false"
+          fi
+
+      - name: Ensure zsh is installed
+        id: install-zsh
+        run: |
+          if ! command -v zsh >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y zsh
+            echo "::set-output name=installed::true"
+          else
+            echo "::set-output name=installed::false"
+          fi
+
+  bats_tests:
+    name: Run Bats tests
+    needs: setup-shells
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: bats-core/bats-action@3.0.1
+      - name: Run Bats
+        shell: bash
+        run: bats test/**/*.bats
+
+  shell_syntax_checks:
+    name: Syntax & Cross‑Shell Checks
+    needs: setup-shells
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install ShellCheck
+        uses: ludeeus/action-shellcheck@v1
+
+      - name: Run ShellCheck (POSIX)
+        run: shellcheck --shell=sh changeish.sh
+
+      - name: Syntax check in bash
+        run: bash --posix -n ./changeish.sh
+
+      - name: Syntax check in sh
+        run: sh -n ./changeish.sh
+
+      - name: Syntax check in dash
+        run: dash -n ./changeish.sh
+
+      - name: Syntax check in ash
+        run: ash -n ./changeish.sh
+
+      - name: Syntax check in zsh
+        run: zsh -n ./changeish.sh

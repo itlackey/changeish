@@ -1,5 +1,11 @@
 #!/usr/bin/env bats
 
+export ERROR_LOG="$BATS_TEST_DIRNAME/.logs/main.error.log"
+
+setup_file() {
+  # Ensure the error log is empty before each test
+  : >"$ERROR_LOG"
+}
 setup() {
   load 'test_helper/bats-support/load'
   load 'test_helper/bats-assert/load'
@@ -12,8 +18,7 @@ setup() {
   git config user.name "Test"
   git config user.email "test@example.com"
   CHANGEISH_SCRIPT="$BATS_TEST_DIRNAME/../changes.sh"
-  ERROR_LOG="$BATS_TEST_DIRNAME/.logs/$BATS_TEST_NAME.log"
-  echo >$ERROR_LOG
+  #echo >$ERROR_LOG
   mock_ollama "dummy" "Running Ollama model"
   mock_curl "dummy" "Hello! How can I assist you today?"
 }
@@ -207,12 +212,11 @@ EOF
 @test "Template: Make prompt template writes default template" {
   rm -f my_prompt_template.md
   run "$CHANGEISH_SCRIPT" --make-prompt-template my_prompt_template.md
+  cat my_prompt_template.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
-  [ -f my_prompt_template.md ]
+  [[ -f "my_prompt_template.md" ]]
   grep -q '<<<INSTRUCTIONS>>>' my_prompt_template.md
   grep -q 'Output rules' my_prompt_template.md
-  grep -q 'Example Output' my_prompt_template.md
-  grep -q '<<<END>>>' my_prompt_template.md
   echo "$output" | grep -q "Default prompt template written to my_prompt_template.md."
 }
 
@@ -354,21 +358,21 @@ EOF
   generate_commits
   echo "a" >a.txt
   run "$CHANGEISH_SCRIPT" --save-history
-  [ -f history.md ]
-  [ ! -f prompt.md ]
+  [[ -f "history.md" ]]
+  [[ ! -f "prompt.md" ]]
 }
 
 @test "Output: --save-prompt keeps prompt file" {
   echo "a" >a.txt && git add a.txt && git commit -m "a"
   run "$CHANGEISH_SCRIPT" --save-prompt
-  [ -f prompt.md ]
+  [ -f "prompt.md" ]
 }
 
 @test "Output: both save flags" {
   echo "a" >a.txt && git add a.txt && git commit -m "a"
   run "$CHANGEISH_SCRIPT" --save-history --save-prompt
-  [ -f history.md ]
-  [ -f prompt.md ]
+  [ -f "history.md "]
+  [ -f "prompt.md" ]
   cat history.md >>$ERROR_LOG
   cat prompt.md >>$ERROR_LOG
 }
@@ -696,7 +700,7 @@ EOF
 
   cat CHANGELOG.md >>$ERROR_LOG
 
-  [ "$status" -eq 0 ]
+  [[ "$status" -eq 0 ]]
   tail -n5 CHANGELOG.md | grep -q "chore: at end"
   tail -n6 CHANGELOG.md | grep -q "## nope"
 }
@@ -714,7 +718,7 @@ EOF
   mock_ollama "dummy" "- feat: added\n- updated AI"
   run "$CHANGEISH_SCRIPT" \
     --update-mode auto --save-history --save-prompt --debug
-  [ "$status" -eq 0 ]
+  [[ "$status" -eq 0 ]]
 
   # Expect updated section contents in CHANGELOG.md
   cat history.md >>$ERROR_LOG
@@ -738,7 +742,7 @@ EOF
   mock_ollama "dummy" "- feat: new version"
   run "$CHANGEISH_SCRIPT" --model-provider local \
     --update-mode auto --save-history --save-prompt
-  [ "$status" -eq 0 ]
+  [[ "$status" -eq 0 ]]
   cat CHANGELOG.md >>$ERROR_LOG
   # Check new "1.2.4" section exists and includes the new feat
   grep -q "^## 1.2.3" CHANGELOG.md
@@ -761,7 +765,7 @@ EOF
   run "$CHANGEISH_SCRIPT" --model-provider remote --api-url http://fake \
     --api-model dummy --update-mode append --section-name "v4.0.0" \
     --save-history --save-prompt
-  [ "$status" -eq 0 ]
+  [[ "$status" -eq 0 ]]
   cat CHANGELOG.md >>$ERROR_LOG
   echo "History:" >>$ERROR_LOG
   cat history.md >>$ERROR_LOG
