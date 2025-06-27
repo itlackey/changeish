@@ -3,6 +3,8 @@
 mkdir -p "$BATS_TEST_DIRNAME/.logs"
 source "$BATS_TEST_DIRNAME/../changes.sh"
 export ERROR_LOG="$BATS_TEST_DIRNAME/.logs/error.log"
+load 'test_helper/bats-support/load'
+load 'test_helper/bats-assert/load'
 #echo >$ERROR_LOG
 setup_file() {
     # Ensure the error log is empty before each test
@@ -75,11 +77,8 @@ EOF
 - old auto
 EOF
     run run_insert_changelog CHANGELOG.md "- auto new" "v2.0.0" auto "## v2.0.0\n- old auto"
-    [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    assert_success
     grep -Fq -- "- auto new" CHANGELOG.md || {
         echo "Expected '- auto new' in CHANGELOG.md" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
@@ -275,11 +274,8 @@ EOF
 - keep
 EOF
     run insert_changelog CHANGELOG.md $'- line1\n- line2\n- line3' "v11.0.0" update "## v11.0.0\n- keep"
-    [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    assert_success
     grep -qF -- "- line1" CHANGELOG.md || {
         echo "Expected '- line1' in CHANGELOG.md" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"

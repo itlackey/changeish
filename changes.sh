@@ -55,7 +55,7 @@
 #   CHANGEISH_API_URL     Default API URL for remote generation (overridden by --api-url)
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
-#set -eu
+# END_HELP
 
 # Initialize default option values
 debug="false"
@@ -137,7 +137,7 @@ show_version() {
 # Print usage information
 show_help() {
     echo "Version: $(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0")"
-    awk '/^set -eu/ {exit} NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
+    awk '/^# END_HELP/ {exit} NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
     echo "Default version files to check for version changes:"
     for file in $default_version_files; do
         echo "  $file"
@@ -154,20 +154,24 @@ show_available_releases() {
 # -------------------------------------------------------------------
 # New helper: build a single history “entry” (commit, staged or current)
 # Globals:
-#   outfile            – path to Markdown history file
-#   found_version_file – path to version file, if any
-#   include_pattern    – pattern for “include” diffs
-#   exclude_pattern    – pattern for excluding files from full diff
+#   outfile            - path to Markdown history file
+#   found_version_file - path to version file, if any
+#   include_pattern    - pattern for “include” diffs
+#   exclude_pattern    - pattern for excluding files from full diff
 # Arguments:
 #   $1: label to display (hash or “Staged Changes” / “Working Tree”)
 #   $2: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
 build_entry() {
     label="$1"
+    be_version="$2"
     diff_spec=""
     include_arg=""
     exclude_arg=""
-    if [ -n "$2" ]; then
-        diff_spec=$2
+    if [ -n "$3" ]; then
+        diff_spec=$3
+    fi
+    if [ "$debug" = "true" ] && [ "$should_generate_changelog" = "false" ]; then
+        echo "Changelog generation skipped: missing remote configuration (API key or URL)." >&2
     fi
 
     echo "Building entry for: $label"
@@ -175,16 +179,43 @@ build_entry() {
 
     echo "## $label" >>"$outfile"
 
-    case "$diff_spec" in
-    *^!)
-        echo "**Commit:** $(git show -s --format=%s "$diff_spec")" >>"$outfile"
-        echo "**Date:**   $(git show -s --format=%ci "$diff_spec")" >>"$outfile"
-        echo "**Message:**" >>"$outfile"
-        echo '```' >>"$outfile"
-        git show -s --format=%B "$diff_spec" >>"$outfile"
-        echo '```' >>"$outfile"
-        ;;
-    esac
+    # version‐file diff
+    if [ -n "$found_version_file" ]; then
+        {
+            echo ""
+            version_diff=""
+            if [ -n "$diff_spec" ]; then
+                # shellcheck disable=SC2086
+                version_diff="$(git --no-pager diff $diff_spec \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+            else
+                # shellcheck disable=SC2086
+                version_diff="$(git --no-pager diff \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+            fi
+            if [ -n "$version_diff" ]; then
+
+                echo "**Version:** $(parse_version "$version_diff")" >>"$outfile"
+            else
+
+                echo "**Version:** $be_version" >>"$outfile"
+            fi
+        } >>"$outfile"
+        # [ "$debug" = false ] && echo "$found_version_file" >>"$outfile"
+    fi
+
+    if [ -n "$diff_spec" ] && [ "$diff_spec" != "--cached" ]; then
+        printf 'Commit %s\n' "${diff_spec:-Working Tree}"
+        {
+            echo "**Commit:** $(git show -s --format=%s "${diff_spec}")"
+            echo "**Date:**   $(git show -s --format=%ci "${diff_spec}")"
+            echo "**Message:**"
+            git show -s --format=%B "${diff_spec}"
+            echo
+        } >>"$outfile"
+    fi
 
     printf 'Set header\n'
 
@@ -192,20 +223,20 @@ build_entry() {
         git --no-pager diff --unified=0 -- "*todo*"
     fi
     if [ -n "$todo_pattern" ]; then
-        if [ -n "$diff_spec" ]; then
-            todo_diff=$(git --no-pager diff "$diff_spec" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
-        else
-            todo_diff=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern" | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
-        fi
-        if [ -n "$todo_diff" ]; then
-            {
+        {
+            if [ -n "$diff_spec" ]; then
+                todo_diff=$(git --no-pager diff "$diff_spec" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern") # | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
+            else
+                todo_diff=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern") # | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
+            fi
+            if [ -n "$todo_diff" ]; then
                 echo ""
                 echo "### Changes in TODOs"
                 echo '```diff'
                 printf '%s\n' "$todo_diff"
                 echo '```'
-            } >>"$outfile"
-        fi
+            fi
+        } >>"$outfile"
     fi
 
     printf 'Set todo diff\n'
@@ -238,31 +269,43 @@ build_entry() {
         echo '```diff'
 
         if [ -n "$diff_spec" ]; then
-            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options">&2
+            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options" >&2
             if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
-                git --no-pager diff "$diff_spec" $default_diff_options "$include_arg" "$exclude_arg"
-            elif [ -n "$include_arg" ]; then
-                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
-                git --no-pager diff "$diff_spec" $default_diff_options "$include_arg"
+                git --no-pager diff "$diff_spec" \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
             elif [ -n "$exclude_arg" ]; then
-                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
-                git --no-pager diff "$diff_spec" $default_diff_options "$exclude_arg"
+                git --no-pager diff "$diff_spec" \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$exclude_arg"
+            elif [ -n "$include_arg" ]; then
+                git --no-pager diff "$diff_spec" \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$include_arg"
             else
-                printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options"
-                git --no-pager diff "${diff_spec}" "$default_diff_options"
+                git --no-pager diff "$diff_spec" \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no
             fi
         else
-            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options">&2
+            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options" >&2
 
             if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-                git --no-pager diff $default_diff_options "$include_arg" "$exclude_arg"
+                git --no-pager diff \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
             elif [ -n "$include_arg" ]; then
-                git --no-pager diff $default_diff_options "$include_arg"
+                git --no-pager diff \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$include_arg"
             elif [ -n "$exclude_arg" ]; then
-                git --no-pager diff $default_diff_options "$exclude_arg"
+                git --no-pager diff \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no -- "$exclude_arg"
             else
-                git --no-pager diff --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no
+                git --no-pager diff \
+                    --minimal --no-prefix --unified=0 --no-color -b -w \
+                    --compact-summary --color-moved=no
             fi
         fi
         echo '```'
@@ -477,41 +520,31 @@ insert_changelog() {
     fi
 }
 
+parse_version() {
+    # Extracts version numbers like v1.2.3, 1.2.3, or "1.2.3" from a string argument, preserving the v if present
+    output=$(echo "$1" | sed -n -E 's/.*([vV][0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
+
+    if [ -z "$output" ]; then
+        output=$(echo "$1" | sed -n -E 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
+    fi
+
+    echo "$output"
+}
+
 get_current_version_from_file() {
     file="$1"
     if [ ! -f "$file" ]; then
         echo ""
-        return 1
+        return 0
     fi
-    if [ "$file" = "changes.sh" ]; then
-        version=$(grep -E 'Version: [0-9]+\.[0-9]+(\.[0-9]+)?' "$file" | head -1 | sed -n 's/.*Version: \(v\?[0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
-        if [ -n "$version" ]; then
-            echo "$version"
-            return 0
-        fi
-    fi
-    version=$(grep -E 'version[[:space:]]*[:=][[:space:]]*["]?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*version[[:space:]]*[:=][[:space:]]*\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
+
+    version=$(parse_version "$(grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$file")")
     if [ -n "$version" ]; then
         echo "$version"
         return 0
     fi
-    version=$(grep -E '__version__[[:space:]]*=[[:space:]]*["]([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*__version__[[:space:]]*=[[:space:]]*"\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\)".*/\1/p')
-    if [ -n "$version" ]; then
-        echo "$version"
-        return 0
-    fi
-    version=$(grep -E '"version"[[:space:]]*:[[:space:]]*"[0-9]+\.[0-9]+(\.[0-9]+)?"' "$file" | head -1 | sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\)".*/\1/p')
-    if [ -n "$version" ]; then
-        echo "$version"
-        return 0
-    fi
-    version=$(grep -E '[vV]?([0-9]+\.[0-9]+(\.[0-9]+)?)' "$file" | head -1 | sed -n 's/.*\([0-9]\+\.[0-9]\+\(\.[0-9]\+\)?\).*/\1/p')
-    if [ -n "$version" ]; then
-        echo "$version"
-        return 0
-    fi
+
     echo ""
-    return 1
 }
 
 extract_changelog_section() {
@@ -540,10 +573,27 @@ extract_changelog_section() {
 }
 
 main() {
+    # POSIX-compliant error trap: print error message, line number, and exit code
+    # on_exit() {
+    #     status=$?
+    #     if [ $status -ne 0 ]; then
+    #         echo "Error: Command failed at line $LAST_EVAL_LINE (exit code $status)" >&2
+    #     fi
+    # }
+    # # Save the line number before each command
+    # trap 'LAST_EVAL_LINE=$LINENO' DEBUG
+    # trap on_exit EXIT
 
-    if [ "$(basename -- "$0")" = "changes.sh" ]; then
-        set -eu
-    fi
+    # POSIX-compliant error trap: print error message, line number, and exit
+    # on_error() {
+    #     echo "Error: Command failed at line $LINENO (exit code $1)" >&2
+    # }
+    # Use trap to capture the exit code and line number before exiting
+
+    # if [ "$(basename -- "$0")" = "changes.sh" ]; then
+    #     set -eu
+    # fi
+
     config_file=""
     model="qwen2.5-coder"
     model_set="false"
@@ -664,10 +714,6 @@ main() {
         exit 0
     fi
 
-    # CHANGEISH_API_URL=""
-    # CHANGEISH_API_KEY=""
-    # CHANGEISH_API_MODEL=""
-
     if [ -n "$config_file" ]; then
         if [ -f "$config_file" ]; then
             # shellcheck disable=SC1090
@@ -686,8 +732,8 @@ main() {
     fi
 
     api_key="${CHANGEISH_API_KEY:-}"
-    api_url="${api_url:-CHANGEISH_API_URL:-}"
-    api_model="${api_model:-CHANGEISH_API_MODEL:-}"
+    api_url="${api_url:-${CHANGEISH_API_URL:-}}"
+    api_model="${api_model:-${CHANGEISH_API_MODEL:-}}"
 
     found_version_file=""
     if [ -n "$version_file" ]; then
@@ -709,6 +755,10 @@ main() {
     if [ -z "$section_name" ] || [ "$section_name" = "auto" ]; then
         if [ -n "$found_version_file" ]; then
             current_version=$(get_current_version_from_file "$found_version_file")
+            if [ "$debug" = "true" ]; then
+                echo "Found version file: $found_version_file"
+                echo "Current version: $current_version"
+            fi
             if [ -n "$current_version" ]; then
                 section_name="$current_version"
             else
@@ -758,6 +808,7 @@ main() {
         remote="true"
         ;;
     auto)
+        echo "Generation mode auto..." >&2
         if ! command -v ollama >/dev/null 2>&1; then
             if [ "$debug" = "true" ]; then
                 echo "ollama not found, falling back to remote API."
@@ -767,9 +818,26 @@ main() {
                 echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
                 remote="false"
                 should_generate_changelog="false"
+                echo "Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set." >&2
             fi
             if [ -z "$api_url" ]; then
-                echo "Warning: Falling back to remote but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+                echo "Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+                remote="false"
+                should_generate_changelog="false"
+            fi
+        elif ! ollama list >/dev/null 2>&1; then
+            if [ "$debug" = "true" ]; then
+                echo "ollama daemon not running, falling back to remote API."
+            fi
+            remote="true"
+            if [ -z "$api_key" ]; then
+                echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
+                remote="false"
+                should_generate_changelog="false"
+                echo "Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set." >&2
+            fi
+            if [ -z "$api_url" ]; then
+                echo "Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
                 remote="false"
                 should_generate_changelog="false"
             fi
@@ -785,12 +853,19 @@ main() {
         if [ -z "$api_model" ]; then
             api_model="$model"
         fi
+        missing_api=""
         if [ -z "$api_key" ]; then
-            echo "Error: --remote specified but CHANGEISH_API_KEY is not set." >&2
-            exit 1
+            missing_api="CHANGEISH_API_KEY"
         fi
         if [ -z "$api_url" ]; then
-            echo "Error: --remote specified but no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+            if [ -n "$missing_api" ]; then
+                missing_api="$missing_api and API URL"
+            else
+                missing_api="API URL"
+            fi
+        fi
+        if [ -n "$missing_api" ]; then
+            echo "Error: --remote specified but $missing_api is not set (use --api-url or CHANGEISH_API_URL for the URL)." >&2
             exit 1
         fi
     fi
@@ -821,6 +896,7 @@ main() {
         echo "Changelog file: $changelog_file"
         echo "Prompt template: $prompt_template"
         echo "Version file: $found_version_file"
+        echo "Current Version: $current_version"
         echo "All history: $all_history"
         echo "Current changes: $current_changes"
         echo "Staged changes: $staged_changes"
@@ -834,10 +910,10 @@ main() {
     fi
 
     if [ "$current_changes" = "true" ]; then
-        build_entry "Working Tree" ""
+        build_entry "Working Tree" "$current_version" ""
         echo "Generated git history for uncommitted changes in $outfile."
     elif [ "$staged_changes" = "true" ]; then
-        build_entry "Staged Changes" "--cached"
+        build_entry "Staged Changes" "$current_version" "--cached"
         echo "Generated git history for staged changes in $outfile."
     else
         if [ -z "$to_rev" ]; then to_rev="HEAD"; fi
@@ -858,13 +934,14 @@ main() {
         end_commit=$(echo "$commits_list" | tail -1)
         start_date=$(git show -s --format=%ci "$start_commit")
         end_date=$(git show -s --format=%ci "$end_commit")
-        total_commits=$(echo "$commits_list" | wc -l)
-        echo "Generating git history for $total_commits commits from $start_commit ($start_date) to $end_commit ($end_date) on branch $(git rev-parse --abbrev-ref HEAD)..."
+        total_commits=$(echo "$commits_list" | wc -l | tr -d '[:space:]')
+        printf "Generating git history for %s commits from %s (%s) to %s (%s) on branch %s...\n" \
+            "$total_commits" "$start_commit" "$start_date" "$end_commit" "$end_date" "$(git rev-parse --abbrev-ref HEAD)"
         OLDIFS="$IFS"
         IFS='
 '
         for commit in $commits_list; do
-            build_entry "$commit" "$commit"
+            build_entry "$commit" "" "$commit"
         done
         IFS="$OLDIFS"
         echo "Generated git history in $outfile."
