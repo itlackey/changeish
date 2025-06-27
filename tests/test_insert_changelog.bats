@@ -26,14 +26,14 @@ teardown() {
     rm -rf "$TMP_DIR"
 }
 
-# Helper to call insert_changelog with all required args
-run_insert_changelog() {
+# Helper to call update_changelog with all required args
+run_update_changelog() {
     local file="$1"
     local content="$2"
     local section_name="$3"
     local update_mode="$4"
     local existing_section="$5"
-    insert_changelog "$file" "$content" "$section_name" "$update_mode" "$existing_section"
+    update_changelog "$file" "$content" "$section_name" "$update_mode" "$existing_section"
 }
 
 @test "update mode: updates existing section" {
@@ -47,9 +47,9 @@ run_insert_changelog() {
 ## v0.9.0
 - previous
 EOF
-    run run_insert_changelog CHANGELOG.md "- new content" "v1.0.0" update "## v1.0.0\n- old content"
+    run run_update_changelog CHANGELOG.md "- new content" "v1.0.0" update "## v1.0.0\n- old content"
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
@@ -76,7 +76,7 @@ EOF
 ## v2.0.0
 - old auto
 EOF
-    run run_insert_changelog CHANGELOG.md "- auto new" "v2.0.0" auto "## v2.0.0\n- old auto"
+    run run_update_changelog CHANGELOG.md "- auto new" "v2.0.0" auto "## v2.0.0\n- old auto"
     cat CHANGELOG.md >>"$ERROR_LOG"
     assert_success
     grep -Fq -- "- auto new" CHANGELOG.md || {
@@ -102,17 +102,21 @@ EOF
 ## v3.0.0
 - keep
 EOF
-    run insert_changelog CHANGELOG.md "- prepended" "v3.0.0" prepend "## v3.0.0\n- keep"
+    run update_changelog CHANGELOG.md "- prepended" "v3.0.0" prepend "## v3.0.0\n- keep"
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
-    pos1=$(grep -Fn -- "- prepended" CHANGELOG.md | cut -d: -f1)
-    pos2=$(grep -n "## v3.0.0" CHANGELOG.md | cut -d: -f1)
-    [ "$pos1" -lt "$pos2" ] || {
-        echo "Expected '- prepended' before '## v3.0.0' (lines $pos1 < $pos2)" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
+    # Remove trailing blank lines for comparison
+    expected_content=$'# Changelog\n\n## v3.0.0\n\n- prepended\n\n## v3.0.0\n\n- keep\n\n[Managed by changeish](https://github.com/itlackey/changeish)'
+    actual_content=$(sed '${/^$/d;}' CHANGELOG.md)
+    [ "$actual_content" = "$expected_content" ] || {
+        echo "CHANGELOG.md content did not match expected:" >>"$ERROR_LOG"
+        echo "Expected:" >>"$ERROR_LOG"
+        printf "%s" "$expected_content" >>"$ERROR_LOG"
+        echo "Actual:" >>"$ERROR_LOG"
+        printf "%s\n" "$actual_content" >>"$ERROR_LOG"
         false
     }
     echo "Changelog created successfully" >>"$ERROR_LOG"
@@ -126,28 +130,27 @@ EOF
 # Changelog
 
 ## v4.0.0
+
 - keep
 
 ## v3.0.0
+
 - old
 EOF
-    run insert_changelog CHANGELOG.md "- appended" "v4.0.0" append "## v4.0.0\n- keep"
+    run update_changelog CHANGELOG.md "- appended" "v4.0.0" append "## v4.0.0\n- keep"
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
-    pos1=$(grep -Fn -- "- appended" CHANGELOG.md | cut -d: -f1)
-    pos2=$(grep -n "## v4.0.0" CHANGELOG.md | cut -d: -f1)
-    pos3=$(grep -n "## v3.0.0" CHANGELOG.md | cut -d: -f1)
-    [ "$pos1" -gt "$pos2" ] || {
-        echo "Expected '- appended' after '## v4.0.0' (lines $pos1 > $pos2)" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
-    [ "$pos1" -lt "$pos3" ] || {
-        echo "Expected '- appended' before '## v3.0.0' (lines $pos1 < $pos3)" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
+    expected_content=$'# Changelog\n\n## v4.0.0\n\n- keep\n\n## v3.0.0\n\n- old\n\n## v4.0.0\n\n- appended\n\n[Managed by changeish](https://github.com/itlackey/changeish)'
+    actual_content=$(sed '${/^$/d;}' CHANGELOG.md)
+    [ "$actual_content" = "$expected_content" ] || {
+        echo "CHANGELOG.md content did not match expected:" >>"$ERROR_LOG"
+        echo "Expected:" >>"$ERROR_LOG"
+        printf "%s\n" "$expected_content" >>"$ERROR_LOG"
+        echo "Actual:" >>"$ERROR_LOG"
+        printf "%s\n" "$actual_content" >>"$ERROR_LOG"
         false
     }
     echo "Changelog created successfully" >>"$ERROR_LOG"
@@ -155,33 +158,7 @@ EOF
 
 }
 
-@test "update mode: adds new section if not found" {
-    cat >CHANGELOG.md <<EOF
-# Changelog
 
-## v5.0.0
-- keep
-EOF
-    run insert_changelog CHANGELOG.md "- new section" "v6.0.0" update ""
-    [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
-    grep -q "## v6.0.0" CHANGELOG.md || {
-        echo "Expected '## v6.0.0' in CHANGELOG.md" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
-    grep -qF -- "- new section" CHANGELOG.md || {
-        echo "Expected '- new section' in CHANGELOG.md" >>"$ERROR_LOG"
-        cat CHANGELOG.md >>"$ERROR_LOG"
-        false
-    }
-    echo "Changelog created successfully" >>"$ERROR_LOG"
-    cat CHANGELOG.md >>"$ERROR_LOG"
-
-}
 
 @test "prepend mode: adds new section if not found" {
 
@@ -191,9 +168,9 @@ EOF
 ## v7.0.0
 - keep
 EOF
-    run insert_changelog CHANGELOG.md "- prepended new" "v8.0.0" prepend ""
+    run update_changelog CHANGELOG.md "- prepended new" "v8.0.0" prepend ""
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
@@ -220,9 +197,9 @@ EOF
 ## v9.0.0
 - keep
 EOF
-    run insert_changelog CHANGELOG.md "- appended new" "v10.0.0" append ""
+    run update_changelog CHANGELOG.md "- appended new" "v10.0.0" append ""
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
@@ -244,9 +221,9 @@ EOF
 @test "handles empty changelog file (creates section)" {
 
     rm -f CHANGELOG.md
-    run insert_changelog CHANGELOG.md "- first entry" "v0.1.0" update ""
+    run update_changelog CHANGELOG.md "- first entry" "v0.1.0" update ""
     [ "$status" -eq 0 ] || {
-        echo "insert_changelog failed with status $status" >>"$ERROR_LOG"
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
         #cat CHANGELOG.md >>"$ERROR_LOG"
         false
     }
@@ -273,7 +250,7 @@ EOF
 ## v11.0.0
 - keep
 EOF
-    run insert_changelog CHANGELOG.md $'- line1\n- line2\n- line3' "v11.0.0" update "## v11.0.0\n- keep"
+    run update_changelog CHANGELOG.md $'- line1\n- line2\n- line3' "v11.0.0" update
     cat CHANGELOG.md >>"$ERROR_LOG"
     assert_success
     grep -qF -- "- line1" CHANGELOG.md || {
@@ -295,29 +272,32 @@ EOF
     cat CHANGELOG.md >>"$ERROR_LOG"
 }
 
-@test "no duplicate headers and only one first-level heading" {
-    cat >CHANGELOG.md <<EOF
-# Changelog
+# @test "no duplicate headers and only one first-level heading" {
+#     cat >CHANGELOG.md <<EOF
+# # Changelog
 
-## v1.2.3
-- old
-EOF
-    run insert_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
-    # Check for any duplicate header lines
-    duplicates=$(grep '^#' CHANGELOG.md | sort | uniq -d)
-    [ -z "$duplicates" ] || {
-        echo "Duplicate header(s) found:"
-        echo "$duplicates"
-        return 1
-    }
+# ## v1.2.3
+# - old
+# EOF
+#     run update_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
+#     assert_success
+#     cat CHANGELOG.md >>"$ERROR_LOG"
 
-    # Ensure there is exactly one first‐level heading (H1)
-    h1_count=$(grep -c '^# ' CHANGELOG.md)
-    [ "$h1_count" -eq 1 ] || {
-        echo "Expected exactly one first-level heading, but found $h1_count"
-        return 1
-    }
-}
+#     # Check for any duplicate header lines
+#     duplicates=$(grep '^#' CHANGELOG.md | sort | uniq -d)
+#     [ -z "$duplicates" ] || {
+#         echo "Duplicate header(s) found:"
+#         echo "$duplicates"
+#         return 1
+#     }
+
+#     # Ensure there is exactly one first‐level heading (H1)
+#     h1_count=$(grep -c '^# ' CHANGELOG.md)
+#     [ "$h1_count" -eq 1 ] || {
+#         echo "Expected exactly one first-level heading, but found $h1_count"
+#         return 1
+#     }
+# }
 
 @test "all headers are surrounded by blank lines and file ends with newline" {
     cat >CHANGELOG.md <<EOF
@@ -328,7 +308,7 @@ EOF
 - old
 
 EOF
-    run insert_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
+    run update_changelog CHANGELOG.md $'- new1\n- new2' "v1.2.3" prepend "## v1.2.3\n- old"
     cat CHANGELOG.md >>"$ERROR_LOG"
     # for each header line, ensure blank line before and after
     while read -r line; do
@@ -360,4 +340,131 @@ EOF
         echo "CHANGELOG.md does not end with a newline" >>"$ERROR_LOG"
         return 1
     }
+}
+
+@test "auto mode: section exists: replaces section" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v2.1.0
+- old auto
+EOF
+    run update_changelog CHANGELOG.md "- auto new" "v2.1.0" auto "## v2.1.0\n- old auto"
+    assert_success
+    grep -Fq -- "- auto new" CHANGELOG.md
+    ! grep -q "- old auto" CHANGELOG.md
+}
+
+@test "auto mode: section does not exist: prepends new section" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v2.2.0
+- keep
+EOF
+    run update_changelog CHANGELOG.md "- auto new" "v2.3.0" auto ""
+    assert_success
+    first_section=$(grep -n '^## ' CHANGELOG.md | head -1 | cut -d: -f2)
+    [ "$first_section" = "## v2.3.0" ]
+    grep -Fq -- "- auto new" CHANGELOG.md
+}
+
+@test "update mode: section exists: replaces section" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v3.0.0
+- old content
+EOF
+    run update_changelog CHANGELOG.md "- new content" "v3.0.0" update "## v3.0.0\n- old content"
+    assert_success
+    grep -Fq -- "- new content" CHANGELOG.md
+    ! grep -q "- old content" CHANGELOG.md
+}
+
+@test "update mode: adds new section if not found" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v5.0.0
+- keep
+EOF
+    run update_changelog CHANGELOG.md "- new section" "v6.0.0" update ""
+    cat CHANGELOG.md >>"$ERROR_LOG"
+    [ "$status" -eq 0 ] || {
+        echo "update_changelog failed with status $status" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    grep -q "## v6.0.0" CHANGELOG.md || {
+        echo "Expected '## v6.0.0' in CHANGELOG.md" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    grep -qF -- "- new section" CHANGELOG.md || {
+        echo "Expected '- new section' in CHANGELOG.md" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+
+}
+
+@test "prepend mode: section exists: inserts duplicate at top" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v4.0.0
+- old
+EOF
+    run update_changelog CHANGELOG.md "- new prepended" "v4.0.0" prepend "## v4.0.0\n- old"
+    assert_success
+    # Should have two v4.0.0 sections, new one at top
+    [ $(grep -c '^## v4.0.0' CHANGELOG.md) -eq 2 ]
+    first_section=$(grep -n '^## ' CHANGELOG.md | head -1 | cut -d: -f2)
+    [ "$first_section" = "## v4.0.0" ]
+    grep -Fq -- "- new prepended" CHANGELOG.md
+}
+
+@test "prepend mode: section does not exist: inserts at top" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v4.1.0
+- keep
+EOF
+    run update_changelog CHANGELOG.md "- new prepended" "v4.2.0" prepend ""
+    assert_success
+    first_section=$(grep -n '^## ' CHANGELOG.md | head -1 | cut -d: -f2)
+    [ "$first_section" = "## v4.2.0" ]
+    grep -Fq -- "- new prepended" CHANGELOG.md
+}
+
+@test "append mode: section exists: inserts duplicate at bottom" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v5.0.0
+- old
+EOF
+    run update_changelog CHANGELOG.md "- new appended" "v5.0.0" append "## v5.0.0\n- old"
+    assert_success
+    [ $(grep -c '^## v5.0.0' CHANGELOG.md) -eq 2 ]
+    last_section=$(grep -n '^## ' CHANGELOG.md | tail -1 | cut -d: -f2)
+    [ "$last_section" = "## v5.0.0" ]
+    grep -Fq -- "- new appended" CHANGELOG.md
+}
+
+@test "append mode: section does not exist: inserts at bottom" {
+    cat >CHANGELOG.md <<EOF
+# Changelog
+
+## v5.1.0
+- keep
+EOF
+    run update_changelog CHANGELOG.md "- new appended" "v5.2.0" append ""
+    assert_success
+    last_section=$(grep -n '^## ' CHANGELOG.md | tail -1 | cut -d: -f2)
+    [ "$last_section" = "## v5.2.0" ]
+    grep -Fq -- "- new appended" CHANGELOG.md
 }

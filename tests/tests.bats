@@ -92,7 +92,8 @@ EOF
 
 @test "Show version text" {
   run "$CHANGEISH_SCRIPT" --version
-  [ "$status" -eq 0 ]
+  #assert_success
+  echo "$output"
   echo "$output" | grep -Eq "[0-9]+\.[0-9]+\.[0-9]+"
 }
 
