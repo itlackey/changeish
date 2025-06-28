@@ -59,20 +59,21 @@ jobs:
       - name: Install ShellCheck
         uses: ludeeus/action-shellcheck@master
 
-      - name: Run ShellCheck (POSIX)
-        run: shellcheck --shell=sh changeish.sh
-
       - name: Syntax check in bash
-        run: bash --posix -n ./changeish.sh
+        run: bash --posix -n ./changes.sh
 
       - name: Syntax check in sh
-        run: sh -n ./changeish.sh
+        run: sh -n ./changes.sh
 
       - name: Syntax check in dash
-        run: dash -n ./changeish.sh
+        run: dash -n ./changes.sh
 
       - name: Syntax check in ash
-        run: ash -n ./changeish.sh
+        run: ash -n ./changes.sh
 
       - name: Syntax check in zsh
-        run: zsh -n ./changeish.sh
+        run: zsh -n ./changes.sh
+        
+      - name: Run ShellCheck (POSIX)
+        run: shellcheck --shell=sh ./changes.sh
+

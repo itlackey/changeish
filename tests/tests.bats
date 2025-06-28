@@ -195,8 +195,9 @@ EOF
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "CHANGEISH_MODEL=MY_MODEL" >.env
   mock_ollama "MY_MODEL" ""
-  run "$CHANGEISH_SCRIPT" --current --debug
-  [ "$status" -eq 0 ]
+  run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
+  cat "$ERROR_LOG" >&3
+  assert_success
   echo "$output" | grep -q "Using model: MY_MODEL"
 }
 
