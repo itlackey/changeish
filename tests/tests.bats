@@ -260,9 +260,9 @@ EOF
 
 @test "Mode: all" {
   #generate_commits
-  rm -rf .git
-  rm -f *.txt
-  git init -q
+  # rm -rf .git
+  # rm -f *.txt
+  # git init -q
 
   echo "bin" >.gitignore && git add .gitignore && git commit -m "add .gitignore"
   echo "a" >a.txt && git add a.txt && git commit -m "add a.txt"

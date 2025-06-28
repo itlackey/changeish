@@ -123,7 +123,7 @@ default_version_files="changes.sh package.json pyproject.toml setup.py Cargo.tom
 # Update the script to latest release
 update() {
     latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
-    echo "Updating changeish to version $latest_version..."
+    echo "Updating changeish to version ${latest_version}..."
     curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
     echo "Update complete."
     exit 0
@@ -137,11 +137,11 @@ show_version() {
 
 # Print usage information
 show_help() {
-    echo "Version: $(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0")"
+    echo "Version: $(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0" || true)"
     awk '/^# END_HELP/ {exit} NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
     echo "Default version files to check for version changes:"
-    for file in $default_version_files; do
-        echo "  $file"
+    for file in ${default_version_files}; do
+        echo "  ${file}"
     done
     exit 0
 }
@@ -186,33 +186,35 @@ build_entry() {
         {
             echo ""
             version_diff=""
-            if [ -n "$diff_spec" ]; then
+            if [ -n "${diff_spec}" ]; then
                 # shellcheck disable=SC2086
                 version_diff="$(git --no-pager diff $diff_spec \
                     --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+                    --compact-summary --color-moved=no -- "${found_version_file}" \
+                    | grep -Ei '^[+-].*version' || true)"
             else
                 # shellcheck disable=SC2086
                 version_diff="$(git --no-pager diff \
                     --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no "$found_version_file" | grep -Ei '^[+-].*version' || true)"
+                    --compact-summary --color-moved=no "${found_version_file}" \
+                    | grep -Ei '^[+-].*version' || true)"
             fi
-            if [ -n "$version_diff" ]; then
-
-                echo "**Version:** $(parse_version "$version_diff")" >>"$outfile"
+            if [ -n "${version_diff}" ]; then
+                parsed_version=$(parse_version "${version_diff}")
+                echo "**Version:** ${parsed_version}" >>"${outfile}"
             else
 
-                echo "**Version:** $be_version" >>"$outfile"
+                echo "**Version:** ${be_version}" >>"${outfile}"
             fi
-        } >>"$outfile"
+        } >>"${outfile}"
         # [ "$debug" = false ] && echo "$found_version_file" >>"$outfile"
     fi
 
     if [ -n "$diff_spec" ] && [ "$diff_spec" != "--cached" ]; then
         printf 'Commit %s\n' "${diff_spec:-Working Tree}"
         {
-            echo "**Commit:** $(git show -s --format=%s "${diff_spec}")"
-            echo "**Date:**   $(git show -s --format=%ci "${diff_spec}")"
+            echo "**Commit:** $(git show -s --format=%s "${diff_spec}" || true)"
+            echo "**Date:**   $(git show -s --format=%ci "${diff_spec}" || true)"
             echo "**Message:**"
             git show -s --format=%B "${diff_spec}"
             echo
@@ -224,7 +226,7 @@ build_entry() {
     if [ "$debug" = "true" ]; then
         git --no-pager diff --unified=0 -- "*todo*"
     fi
-    if [ -n "$todo_pattern" ]; then
+    if [ -n "${todo_pattern}" ]; then
         {
             if [ -n "$diff_spec" ]; then
                 todo_diff=$(git --no-pager diff "$diff_spec" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern") # | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)

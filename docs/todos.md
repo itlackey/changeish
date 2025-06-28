@@ -6,6 +6,7 @@
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ENHANCEMENT: --type "summary" option to provide summary of changes
 - ENHANCEMENT: --type "annoucement" option to generate a release announcement
+- ENHANCEMENT: --type "commit" option to generate commit message `git commit -m "$(changeish -t commit)"
 - ENHANCEMENT: add git config user.name to output
 
 - CHORE: Add more "real-world" tests with more detailed output validation
