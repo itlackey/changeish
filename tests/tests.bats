@@ -722,16 +722,32 @@ EOF
   mock_ollama "dummy" "- fix: appended"
   run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
     --update-mode append --section-name "v2.0.0"
+
+  cat CHANGELOG.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
 
-  # Ensure appended content comes after the v2.0.0 section header
-  start=$(grep -n "## v2.0.0" CHANGELOG.md | cut -d: -f1)
-  pos=$(grep -n "fix: appended" CHANGELOG.md | cut -d: -f1)
-  [ "$pos" -gt "$start" ]
-  # And before next section header
-  next=$(grep -n "^## " CHANGELOG.md | sed -n '2p' | cut -d: -f1)
-  if [ -n "$next" ]; then
-    [ "$pos" -lt "$next" ]
+  # Validate the exact order and content of CHANGELOG.md after append
+  expected="
+## v2.0.0
+- initial
+
+## Older
+
+## v2.0.0
+
+- fix: appended
+
+[Managed by changeish](https://github.com/itlackey/changeish)"
+  # Remove the first line (header) and compare the rest
+  actual=$(tail -n +2 CHANGELOG.md | sed '/^$/N;/^\n$/D')
+  if ! diff -u <(echo "$expected") <(echo "$actual"); then
+    echo "Changelog content does not match expected:" >>"$ERROR_LOG"
+    echo "Expected:" >>"$ERROR_LOG"
+    echo "$expected" >>"$ERROR_LOG"
+    echo "Actual:" >>"$ERROR_LOG"
+    echo "$actual" >>"$ERROR_LOG"
+    diff -u <(echo "$expected") <(echo "$actual") >>"$ERROR_LOG"
+    fail "Changelog content does not match expected"
   fi
 }
 
