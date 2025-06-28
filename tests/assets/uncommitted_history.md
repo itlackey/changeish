@@ -1,13 +1,14 @@
 ## Working Tree
 
-### Version Changes
-```diff
--__version__ = "4.5.5"
-+__version__ = "4.5.6"
-```
+**Version:** 4.5.6 (updated)
 
 ### Changes in TODOs
 ```diff
+diff --git todos.md todos.md
+index c693671..d37d605 100644
+--- todos.md
++++ todos.md
+@@ -1,2 +1,2 @@
 -CHORE: setup.py version bump
 -ENHANCEMENT: do cool stuff
 +DONE: setup.py version bump

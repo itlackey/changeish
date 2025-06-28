@@ -8,7 +8,7 @@ VERSION=""
 
 # Delete existing changeish script if it exists
 if [ -n "$(which changeish)" ]; then
-    rm $(which changeish)
+    rm "$(which changeish)"
 fi
 
 # Parse args

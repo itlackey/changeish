@@ -29,25 +29,26 @@
 - Added tests to ensure that the changelog is correctly formatted.
 - Fixed sed -i for macOS compatibility.
 - Updated `changes.sh` to set `set -euo pipefail` for better error handling during script execution.
+- Made various enhancements in output handling in changelog generation for improved readability and maintainability.
+- Updated the versioning in `tests/assets/uncommitted_history.md` to `4.5.6 (updated)`.
 
 ### Fixes
 
 - Fixed an issue where specifying a non-existent version file caused an error.
 - Fixed issue where changelog file creation was skipped when the file did not exist.
-- fixed debug flag handling, should default to "" so checks work correctly
-- Fix: correct URL in `changes.sh`
-- Update todos.md entry for "CHORE: improve prompt to handle updating existing sections"
+- fixed debug flag handling, should default to "" so checks work correctly.
+- Fix: correct URL in `changes.sh`.
+- Update todos.md entry for "CHORE: improve prompt to handle updating existing sections".
+- Fixed the order and content of the CHANGELOG.md after append operation.
 
 ### Chores
 
 - Documentation updates:
    - Updated the todos.md file to reflect completed enhancements.
    - Added notes about newly added arguments and changes in behavior.
-
 - Minor code cleanup and refactoring:
    - Some internal variable names were changed for clarity.
    - Improved commit message generation logic slightly.
-
 - Improved error handling by adding checks for the existence of the Git repository and the presence of a version file.
 - Added `.vscode/launch.json` for better debugging experience.
 - Enhanced `changes.sh` to provide more informative error messages when the specified version file does not exist.

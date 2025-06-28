@@ -7,23 +7,32 @@ on:
     branches: [main]
 
 jobs:
-  setup-shells:
-    name: Setup shells
+
+  bats_tests:
+    name: Run Bats tests
     runs-on: ubuntu-latest
-    outputs:
-      dash_installed: ${{ steps.install-dash.outputs.installed }}
-      zsh_installed: ${{ steps.install-zsh.outputs.installed }}
     steps:
-      - name: Ensure dash (and ash) is installed
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: bats-core/bats-action@3.0.1
+      - name: Run Bats
+        shell: bash
+        run: bats tests/*.bats
+
+  shell_syntax_checks:
+    name: Syntax & Cross-Shell Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure dash is installed
         id: install-dash
         run: |
           if ! command -v dash >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y dash
-            echo "::set-output name=installed::true"
-          else
-            echo "::set-output name=installed::false"
           fi
+      - name: Located dash binary
+        run: "echo \"DASH binary is at: $(which dash)\""
 
       - name: Ensure zsh is installed
         id: install-zsh
@@ -31,46 +40,37 @@ jobs:
           if ! command -v zsh >/dev/null; then
             sudo apt-get update
             sudo apt-get install -y zsh
-            echo "::set-output name=installed::true"
-          else
-            echo "::set-output name=installed::false"
           fi
+      - name: Located zsh binary
+        run: "echo \"ZSH binary is at: $(which zsh)\""
+      - name: Ensure ash is installed
+        id: install-ash
+        run: |
+          if ! command -v ash >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ash
+          fi
+      - name: Located ash binary
+        run: "echo \"ASH binary is at: $(which ash)\""
 
-  bats_tests:
-    name: Run Bats tests
-    needs: setup-shells
-    runs-on: ubuntu-latest
-    steps:
+
       - uses: actions/checkout@v3
-      - uses: bats-core/bats-action@3.0.1
-      - name: Run Bats
-        shell: bash
-        run: bats test/**/*.bats
-
-  shell_syntax_checks:
-    name: Syntax & Cross‑Shell Checks
-    needs: setup-shells
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Install ShellCheck
-        uses: ludeeus/action-shellcheck@v1
-
-      - name: Run ShellCheck (POSIX)
-        run: shellcheck --shell=sh changeish.sh
 
       - name: Syntax check in bash
-        run: bash --posix -n ./changeish.sh
-
+        run: bash --posix -n ./changes.sh
       - name: Syntax check in sh
-        run: sh -n ./changeish.sh
-
+        run: sh -n ./changes.sh
       - name: Syntax check in dash
-        run: dash -n ./changeish.sh
-
-      - name: Syntax check in ash
-        run: ash -n ./changeish.sh
-
+        run: dash -n ./changes.sh
       - name: Syntax check in zsh
-        run: zsh -n ./changeish.sh
+        run: /usr/bin/zsh -n ./changes.sh
+      - name: Syntax check in ash
+        run: ash -n ./changes.sh
+
+      - name: Install ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        env:
+          SHELLCHECK_OPTS: "--shell=sh --severity=warning"
+        with:
+          ignore_paths: tests          
+

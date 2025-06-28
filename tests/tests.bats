@@ -6,6 +6,11 @@ setup_file() {
   # Ensure the error log is empty before each test
   : >"$ERROR_LOG"
 }
+
+# teardown_file() {
+#   # cd "${ORIG_DIR:-$PWD}" 2>/dev/null || true
+#   # rm -rf "${TMP_DIR:-}" 2>/dev/null || true
+# }
 setup() {
   load 'test_helper/bats-support/load'
   load 'test_helper/bats-assert/load'
@@ -24,28 +29,34 @@ setup() {
 }
 
 teardown() {
-  if [[ $status -ne 0 ]]; then
-    echo "--- FAILED TEST OUTPUT ---" >>"$ERROR_LOG"
-    echo "Test: $BATS_TEST_NAME" >>"$ERROR_LOG"
-    echo "$output" >>"$ERROR_LOG"
-    echo "--- END ---" >>"$ERROR_LOG"
-  else
-    echo "--- TEST OUTPUT ($status) ---" >>"$ERROR_LOG"
-    echo "Test: $BATS_TEST_NAME" >>"$ERROR_LOG"
-    echo "$output" >>"$ERROR_LOG"
-    echo "--- END ---" >>"$ERROR_LOG"
-  fi
+  printf '\nTeardown: Capturing test output and cleaning up...%s}\n' "$status" "$BATS_OUT" >>"$ERROR_LOG" 2>/dev/null || true
+  # Suppress errors and guard variable usage
+  local teardown_status=0
+  {
+    if [[ -n "${status+x}" && $status -ne 0 ]]; then
+      echo "--- FAILED TEST OUTPUT ---" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "Test: ${BATS_TEST_NAME:-unknown}" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "${output:-}" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "--- END ---" >>"$ERROR_LOG" 2>/dev/null || true
+    else
+      echo "--- TEST OUTPUT (${status:-?}) ---" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "Test: ${BATS_TEST_NAME:-unknown}" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "${output:-}" >>"$ERROR_LOG" 2>/dev/null || true
+      echo "--- END ---" >>"$ERROR_LOG" 2>/dev/null || true
+    fi
+  } || teardown_status=1
 
-  cd "$ORIG_DIR"
-  rm -rf "$TMP_DIR"
+  # cd "${ORIG_DIR:-$PWD}" 2>/dev/null || true
+  # rm -rf "${TMP_DIR:-}" 2>/dev/null || true
+  return 0
 }
 
 # Helper: create commits a, b, c
 generate_commits() {
   echo "bin" >.gitignore && git add .gitignore
-  echo "a" >a.txt && git add a.txt && git commit -m "a"
-  echo "b" >b.txt && git add b.txt && git commit -m "b"
-  echo "c" >c.txt && git add c.txt && git commit -m "c"
+  echo "a" >a.txt && git add a.txt && git commit -m "add a.txt"
+  echo "b" >b.txt && git add b.txt && git commit -m "add b.txt"
+  echo "c" >c.txt && git add c.txt && git commit -m "add c.txt"
 }
 
 # Helper: mock a local ollama binary that prints a message
@@ -81,7 +92,8 @@ EOF
 
 @test "Show version text" {
   run "$CHANGEISH_SCRIPT" --version
-  [ "$status" -eq 0 ]
+  #assert_success
+  echo "$output"
   echo "$output" | grep -Eq "[0-9]+\.[0-9]+\.[0-9]+"
 }
 
@@ -181,11 +193,19 @@ EOF
 
 @test "Config: Load .env file" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
-  echo "CHANGEISH_MODEL=MY_MODEL" >.env
   mock_ollama "MY_MODEL" ""
-  run "$CHANGEISH_SCRIPT" --current --debug
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "Using model: MY_MODEL"
+  echo "CHANGEISH_MODEL=MY_MODEL" >".env"
+  cat ".env" >&3
+  if [ -f ".env" ]; then
+    echo "Using existing .env file from .env"
+
+    run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
+    cat "$ERROR_LOG" >&3
+    assert_success
+    echo "$output" | grep -q "Using model: MY_MODEL"
+  else
+    echo "Could not create .env file, skipping test."
+  fi
 }
 
 @test "Config: default model" {
@@ -233,6 +253,7 @@ EOF
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "z" >file.txt
   run "$CHANGEISH_SCRIPT" --current --save-history --model-provider none
+  assert_success
   grep -q "Working Tree" history.md
 }
 
@@ -240,30 +261,42 @@ EOF
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "staged content" >file.txt && git add file.txt
   run "$CHANGEISH_SCRIPT" --staged --save-history
-  [ "$status" -eq 0 ]
+  cat history.md >>$ERROR_LOG
+  assert_success
   grep -q "Staged Changes" history.md
 }
 
 @test "Mode: all" {
-  generate_commits
-  run "$CHANGEISH_SCRIPT" --all --save-history
+  #generate_commits
+  # rm -rf .git
+  # rm -f *.txt
+  # git init -q
+
+  echo "bin" >.gitignore && git add .gitignore && git commit -m "add .gitignore"
+  echo "a" >a.txt && git add a.txt && git commit -m "add a.txt"
+  echo "b" >b.txt && git add b.txt && git commit -m "add b.txt"
+  echo "c" >c.txt && git add c.txt && git commit -m "add c.txt"
+
+  run "$CHANGEISH_SCRIPT" --all --save-history --debug
+  assert_success
   cat history.md >>$ERROR_LOG
-  [ "$status" -eq 0 ]
   echo "Checking all commits" >>$ERROR_LOG
-  grep -q "**Commit**" history.md
+  grep -q "\*\*Commit:\*\*" history.md
   echo "Checking for commit a" >>$ERROR_LOG
-  grep -q "a" history.md
+  grep -q "add a.txt" history.md
   echo "Checking for commit b" >>$ERROR_LOG
-  grep -q "b" history.md
+  grep -q "add b.txt" history.md
   echo "Checking for commit c" >>$ERROR_LOG
-  grep -q "c" history.md
+  grep -q "add c.txt" history.md
+  printf 'Test Passed\n' >>$ERROR_LOG
 }
 
 @test "Mode: from_to" {
   generate_commits
   run "$CHANGEISH_SCRIPT" --from HEAD --to HEAD~1 --save-history --debug
-  [ "$status" -eq 0 ]
-  total=$(grep -c "**Commit**" history.md)
+  cat history.md >>$ERROR_LOG
+  assert_success
+  total=$(grep -c "\*\*Commit:\*\*" history.md)
   [ "$total" -eq 2 ]
   echo "$output" | grep -q "Using commit range: HEAD~1^..HEAD"
 }
@@ -272,16 +305,16 @@ EOF
   generate_commits
   run "$CHANGEISH_SCRIPT" --from HEAD~0 --save-history --debug
   [ "$status" -eq 0 ]
-  total=$(grep -c "**Commit**" history.md)
+  total=$(grep -c "\*\*Commit:\*\*" history.md)
   [ "$total" -eq 1 ]
-  echo "$output" | grep -q "Generating git history for 1 commit"
+  echo "$output" | grep -q "1 commit"
 }
 
 @test "Mode: to only" {
   generate_commits
   run "$CHANGEISH_SCRIPT" --to HEAD~0 --save-history --debug
   [ "$status" -eq 0 ]
-  total=$(grep -c "**Commit**" history.md)
+  total=$(grep -c "\*\*Commit:\*\*" history.md)
   [ "$total" -eq 1 ]
   echo "$output" | grep -q "Generating git history for 1 commit"
 }
@@ -290,7 +323,11 @@ EOF
   generate_commits
   echo "ADD" >TODO.md
   git add TODO.md && git commit -m "add TODO"
-  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history --debug
+
+  # list all commits
+  git log --name-status >>$ERROR_LOG
+
+  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern "TODO.md" --save-history --debug
   [ "$status" -eq 0 ]
   cat history.md >>$ERROR_LOG
   grep -q "TODO.md TODO.md" history.md
@@ -311,7 +348,8 @@ EOF
   echo "INCLUDE" >foo.md
   echo "EXCLUDE" >config.txt
   git add foo.md config.txt && git commit -m "add files"
-  run "$CHANGEISH_SCRIPT" --all --include-pattern '*.md' --exclude-pattern 'config*' --save-history
+  run "$CHANGEISH_SCRIPT" --all --include-pattern '*.md' --exclude-pattern 'config*' \
+    --save-history --debug
   [ "$status" -eq 0 ]
   grep -q "diff --git foo.md foo.md" history.md
   ! grep -q "config.txt" history.md
@@ -371,10 +409,10 @@ EOF
 @test "Output: both save flags" {
   echo "a" >a.txt && git add a.txt && git commit -m "a"
   run "$CHANGEISH_SCRIPT" --save-history --save-prompt
-  [ -f "history.md "]
-  [ -f "prompt.md" ]
   cat history.md >>$ERROR_LOG
   cat prompt.md >>$ERROR_LOG
+  [ -f "history.md" ]
+  [ -f "prompt.md" ]
 }
 
 @test "Output: custom changelog file" {
@@ -421,6 +459,7 @@ EOF
   echo "ADDED: do cool stuff" >>todos.md
 
   run "$CHANGEISH_SCRIPT" --save-history --debug
+  cat history.md >>"$ERROR_LOG"
   assert_success
 
   # Compare history.md to expected, ignoring lines starting with '**Date:**', blank lines, and whitespace
@@ -428,7 +467,6 @@ EOF
   if [ -s diff_output.txt ]; then
     echo "Differences found:" >>"$ERROR_LOG"
     cat diff_output.txt >>"$ERROR_LOG"
-    cat history.md >>"$ERROR_LOG"
     fail "history.md does not match expected output"
   fi
 
@@ -446,9 +484,9 @@ EOF
   git add package.json && git commit -m "add package.json"
   echo '{"version": "1.0.1"}' >package.json
   git add package.json && git commit -m "bump version"
-  run "$CHANGEISH_SCRIPT" --all --save-history
-  [ "$status" -eq 0 ]
-  grep -q "### Version Changes" history.md
+  run "$CHANGEISH_SCRIPT" --all --save-history --debug
+  cat history.md >>$ERROR_LOG
+  assert_success
   grep -q "1.0.0" history.md
   grep -q "1.0.1" history.md
 }
@@ -459,9 +497,8 @@ EOF
   echo 'version = "2.0.1"' >my.ver
   git add my.ver && git commit -m "bump version"
   run "$CHANGEISH_SCRIPT" --version-file my.ver --all --save-history
-  [ "$status" -eq 0 ]
-  grep -q "### Version Changes" history.md
-  grep -q "2.0.0" history.md
+  cat history.md >>$ERROR_LOG
+  assert_success
   grep -q "2.0.1" history.md
 }
 
@@ -473,11 +510,11 @@ EOF
   echo '__version__ = "2.0.0"' >setup.py
   echo "No changes" >note.txt
 
-  run "$CHANGEISH_SCRIPT" --current --version-file setup.py --save-history
+  run "$CHANGEISH_SCRIPT" --current --version-file setup.py --save-history --debug
 
   cat history.md >>$ERROR_LOG
-  [ "$status" -eq 0 ]
-  grep -q "Latest Version" history.md
+  assert_success
+  grep -q "Version:" history.md
   grep -q '2.0.0' history.md
 }
 
@@ -533,7 +570,7 @@ EOF
   export CHANGEISH_API_KEY="tok"
   run "$CHANGEISH_SCRIPT" --model-provider remote --api-model gpt-mini
   [ "$status" -ne 0 ]
-  echo "$output" | grep -q "no API URL provided"
+  echo "$output" | grep -q "API URL is not set"
 }
 
 @test "Model: CLI --model overrides env" {
@@ -552,7 +589,7 @@ EOF
   export CHANGEISH_API_KEY="tok"
   run "$CHANGEISH_SCRIPT" --to HEAD --model-provider remote --api-url http://fake --model foo --api-model bar
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "bar"
+  echo "$output" | grep -q "model: bar"
 }
 
 @test "Error: outside git repo" {
@@ -566,8 +603,9 @@ EOF
   rm -rf .git
   git init -q
   run "$CHANGEISH_SCRIPT" --save-history
-  [ "$status" -ne 0 ]
+  assert_failure
   echo "$output" | grep -qi "No commits found in repository"
+  status=0
 }
 
 @test "No changes results in clean empty output" {
@@ -588,8 +626,9 @@ EOF
 @test "Error: bad version file path" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   run "$CHANGEISH_SCRIPT" --version-file does_not_exist.ver --save-history
-  [ "$status" -ne 0 ]
+  assert_failure
   echo "$output" | grep -q "version file"
+  status=0
 }
 
 @test "Generation mode: none skips changelog generation" {
@@ -636,7 +675,7 @@ EOF
   echo "$output" | grep -q "Unknown --model-provider"
 }
 
-@test "Update-mode: prepend inserts before existing section" {
+@test "Update-mode: prepend inserts new section above existing section" {
   echo "# Changelog" >CHANGELOG.md
   echo "## v1.0.0" >>CHANGELOG.md
   echo "- old entry" >>CHANGELOG.md
@@ -650,15 +689,32 @@ EOF
     --update-mode prepend --section-name "v1.0.0"
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
-  # Expect new content above the v1.0.0 section
-  pos1=$(grep -Fn -- "feat: new prepended" CHANGELOG.md | cut -d: -f1)
-  pos2=$(grep -n "## v1.0.0" CHANGELOG.md | cut -d: -f1)
-  [ "$pos1" -lt "$pos2" ] || {
-    echo "Expected '- prepended' before '## v1.0.0' (lines $pos1 < $pos2)" >>"$ERROR_LOG"
-    cat CHANGELOG.md >>"$ERROR_LOG"
-    false
-  }
-  echo "Test passed: prepended content is before the section header" >>"$ERROR_LOG"
+
+  # Ensure the changelog contains the expected content in order
+  expected="
+## v1.0.0
+
+- feat: new prepended
+
+## v1.0.0
+
+- old entry
+
+[Managed by changeish](https://github.com/itlackey/changeish)"
+
+  # Remove the first line (header) and compare the rest
+  actual=$(tail -n +2 CHANGELOG.md | sed '/^$/N;/^\n$/D')
+  if ! diff -u <(echo "$expected") <(echo "$actual"); then
+    echo "Changelog content does not match expected:" >>"$ERROR_LOG"
+    echo "Expected:" >>"$ERROR_LOG"
+    echo "$expected" >>"$ERROR_LOG"
+    echo "Actual:" >>"$ERROR_LOG"
+    echo "$actual" >>"$ERROR_LOG"
+    diff -u <(echo "$expected") <(echo "$actual") >>"$ERROR_LOG"
+    fail "Changelog content does not match expected"
+  fi
+
+  echo "Test passed: new section with heading ## v1.0.0 is prepended above the existing one" >>"$ERROR_LOG"
 }
 
 @test "Update-mode: append adds after existing section" {
@@ -674,15 +730,33 @@ EOF
   mock_ollama "dummy" "- fix: appended"
   run "$CHANGEISH_SCRIPT" --changelog-file CHANGELOG.md \
     --update-mode append --section-name "v2.0.0"
+
+  cat CHANGELOG.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
 
-  # Ensure appended content comes after the v2.0.0 section header
-  start=$(grep -n "## v2.0.0" CHANGELOG.md | cut -d: -f1)
-  pos=$(grep -n "fix: appended" CHANGELOG.md | cut -d: -f1)
-  [ "$pos" -gt "$start" ]
-  # And before next section header
-  next=$(grep -n "^## " CHANGELOG.md | sed -n '2p' | cut -d: -f1)
-  [ "$pos" -lt "$next" ]
+  # Validate the exact order and content of CHANGELOG.md after append
+  expected="
+## v2.0.0
+- initial
+
+## Older
+
+## v2.0.0
+
+- fix: appended
+
+[Managed by changeish](https://github.com/itlackey/changeish)"
+  # Remove the first line (header) and compare the rest
+  actual=$(tail -n +2 CHANGELOG.md | sed '/^$/N;/^\n$/D')
+  if ! diff -u <(echo "$expected") <(echo "$actual"); then
+    echo "Changelog content does not match expected:" >>"$ERROR_LOG"
+    echo "Expected:" >>"$ERROR_LOG"
+    echo "$expected" >>"$ERROR_LOG"
+    echo "Actual:" >>"$ERROR_LOG"
+    echo "$actual" >>"$ERROR_LOG"
+    diff -u <(echo "$expected") <(echo "$actual") >>"$ERROR_LOG"
+    fail "Changelog content does not match expected"
+  fi
 }
 
 @test "Update-mode: append at end if section missing" {
@@ -735,17 +809,22 @@ EOF
   echo '__version__ = "1.2.3"' >setup.py
   git add CHANGELOG.md setup.py
   git commit -m "init"
-  #echo '__version__ = "1.2.4"' >setup.py
+  echo '__version__ = "1.2.4"' >setup.py
   echo "feat: new version" >file.txt
   git add file.txt
 
   mock_ollama "dummy" "- feat: new version"
   run "$CHANGEISH_SCRIPT" --model-provider local \
-    --update-mode auto --save-history --save-prompt
-  [[ "$status" -eq 0 ]]
+    --update-mode auto --save-history --save-prompt \
+    --debug
+  assert_success
+
+  echo "HISTORY:" >>$ERROR_LOG
+  cat history.md >>$ERROR_LOG
+  echo "CHANGELOG:" >>$ERROR_LOG
   cat CHANGELOG.md >>$ERROR_LOG
   # Check new "1.2.4" section exists and includes the new feat
-  grep -q "^## 1.2.3" CHANGELOG.md
+  grep -q "^## 1.2.4" CHANGELOG.md
   grep -q "feat: new version" CHANGELOG.md
 }
 

@@ -20,12 +20,7 @@
             "name": "Bash-Debug (simplest configuration)",
             "program": "${file}",
             "args": [
-                "--current",
-                "--save-history",
-                "--generation-mode",
-                "none",
-                "--config-file",
-                ".env"
+                "--model-provider", "auto", "--api-url", "http://fake", "--api-model", "dummy"
             ]
         }
     ]
