@@ -305,7 +305,11 @@ EOF
   generate_commits
   echo "ADD" >TODO.md
   git add TODO.md && git commit -m "add TODO"
-  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern TODO.md --save-history --debug
+
+  # list all commits
+  git log --name-status >>$ERROR_LOG
+
+  run "$CHANGEISH_SCRIPT" --to HEAD --include-pattern "TODO.md" --save-history --debug
   [ "$status" -eq 0 ]
   cat history.md >>$ERROR_LOG
   grep -q "TODO.md TODO.md" history.md
@@ -653,7 +657,7 @@ EOF
   echo "$output" | grep -q "Unknown --model-provider"
 }
 
-@test "Update-mode: prepend inserts before existing section" {
+@test "Update-mode: prepend inserts new section above existing section" {
   echo "# Changelog" >CHANGELOG.md
   echo "## v1.0.0" >>CHANGELOG.md
   echo "- old entry" >>CHANGELOG.md
@@ -667,15 +671,32 @@ EOF
     --update-mode prepend --section-name "v1.0.0"
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
-  # Expect new content above the v1.0.0 section
-  pos1=$(grep -Fn -- "feat: new prepended" CHANGELOG.md | cut -d: -f1)
-  pos2=$(grep -n "## v1.0.0" CHANGELOG.md | cut -d: -f1)
-  [ "$pos1" -lt "$pos2" ] || {
-    echo "Expected '- prepended' before '## v1.0.0' (lines $pos1 < $pos2)" >>"$ERROR_LOG"
-    cat CHANGELOG.md >>"$ERROR_LOG"
-    false
-  }
-  echo "Test passed: prepended content is before the section header" >>"$ERROR_LOG"
+
+  # Ensure the changelog contains the expected content in order
+  expected="
+## v1.0.0
+
+- feat: new prepended
+
+## v1.0.0
+
+- old entry
+
+[Managed by changeish](https://github.com/itlackey/changeish)"
+
+  # Remove the first line (header) and compare the rest
+  actual=$(tail -n +2 CHANGELOG.md | sed '/^$/N;/^\n$/D')
+  if ! diff -u <(echo "$expected") <(echo "$actual"); then
+    echo "Changelog content does not match expected:" >>"$ERROR_LOG"
+    echo "Expected:" >>"$ERROR_LOG"
+    echo "$expected" >>"$ERROR_LOG"
+    echo "Actual:" >>"$ERROR_LOG"
+    echo "$actual" >>"$ERROR_LOG"
+    diff -u <(echo "$expected") <(echo "$actual") >>"$ERROR_LOG"
+    fail "Changelog content does not match expected"
+  fi
+
+  echo "Test passed: new section with heading ## v1.0.0 is prepended above the existing one" >>"$ERROR_LOG"
 }
 
 @test "Update-mode: append adds after existing section" {

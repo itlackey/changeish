@@ -250,7 +250,13 @@ EOF
 ## v11.0.0
 - keep
 EOF
-    run update_changelog CHANGELOG.md $'- line1\n- line2\n- line3' "v11.0.0" update
+
+cat changes.md <<EOF
+- line1
+- line2
+- line3
+EOF
+    run update_changelog CHANGELOG.md $(cat changes.md)' "v11.0.0" update
     cat CHANGELOG.md >>"$ERROR_LOG"
     assert_success
     grep -qF -- "- line1" CHANGELOG.md || {
