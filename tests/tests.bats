@@ -194,10 +194,10 @@ EOF
 @test "Config: Load .env file" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   mock_ollama "MY_MODEL" ""
-  echo "CHANGEISH_MODEL=MY_MODEL" >"$BATS_TEST_DIRNAME/.env"
-  cat "$BATS_TEST_DIRNAME/.env" >&3
-  if [ -f "$BATS_TEST_DIRNAME/.env" ]; then
-    echo "Using existing .env file from $BATS_TEST_DIRNAME/.env"
+  echo "CHANGEISH_MODEL=MY_MODEL" >".env"
+  cat ".env" >&3
+  if [ -f ".env" ]; then
+    echo "Using existing .env file from .env"
 
     run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
     #cat "$ERROR_LOG" >&3
@@ -809,13 +809,14 @@ EOF
   echo '__version__ = "1.2.3"' >setup.py
   git add CHANGELOG.md setup.py
   git commit -m "init"
-  #echo '__version__ = "1.2.4"' >setup.py
+  echo '__version__ = "1.2.4"' >setup.py
   echo "feat: new version" >file.txt
   git add file.txt
 
   mock_ollama "dummy" "- feat: new version"
   run "$CHANGEISH_SCRIPT" --model-provider local \
-    --update-mode auto --save-history --save-prompt
+    --update-mode auto --save-history --save-prompt \
+    --debug
   assert_success
 
   echo "HISTORY:" >>$ERROR_LOG
@@ -823,7 +824,7 @@ EOF
   echo "CHANGELOG:" >>$ERROR_LOG
   cat CHANGELOG.md >>$ERROR_LOG
   # Check new "1.2.4" section exists and includes the new feat
-  grep -q "^## 1.2.3" CHANGELOG.md
+  grep -q "^## 1.2.4" CHANGELOG.md
   grep -q "feat: new version" CHANGELOG.md
 }
 

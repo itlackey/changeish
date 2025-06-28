@@ -29,7 +29,8 @@
 - Added tests to ensure that the changelog is correctly formatted.
 - Fixed sed -i for macOS compatibility.
 - Updated `changes.sh` to set `set -euo pipefail` for better error handling during script execution.
-- Made various enhancements in output handling in changelog generation for improved readability and maintainability. 
+- Made various enhancements in output handling in changelog generation for improved readability and maintainability.
+- Updated the versioning in `tests/assets/uncommitted_history.md` to `4.5.6 (updated)`.
 
 ### Fixes
 

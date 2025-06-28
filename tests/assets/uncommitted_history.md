@@ -1,7 +1,6 @@
 ## Working Tree
 
-**Version:** 4.5.5
-4.5.6
+**Version:** 4.5.6 (updated)
 
 ### Changes in TODOs
 ```diff

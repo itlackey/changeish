@@ -57,12 +57,13 @@
 #
 # END_HELP
 set -e
+IFS=' 
+'
 
 # Initialize default option values
 debug="false"
 from_rev=""
 to_rev=""
-default_diff_options="--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
 include_pattern=""
 exclude_pattern=""
 todo_pattern="*todo*"
@@ -166,158 +167,135 @@ show_available_releases() {
 build_entry() {
     label="$1"
     be_version="$2"
-    diff_spec=""
+    diff_spec="$3"
     include_arg=""
     exclude_arg=""
-    if [ -n "$3" ]; then
-        diff_spec=$3
-    fi
-    if [ "$debug" = "true" ] && [ "$should_generate_changelog" = "false" ]; then
-        echo "Changelog generation skipped: missing remote configuration (API key or URL)." >&2
-    fi
-
-    echo "Building entry for: $label"
-    echo "Diff spec: '$diff_spec'"
-
-    echo "## $label" >>"$outfile"
-
+    # Debug output to stderr only
+    [ "${debug:-false}" = "true" ] && printf 'Building entry for: %s\n' "${label}" >&2
+    [ "${debug:-false}" = "true" ] && printf 'Diff spec: %s\n' "${diff_spec}" >&2
+    [ "${debug:-false}" = "true" ] && printf 'be_version: %s\n' "${be_version}" >&2
+    printf '## %s\n' "${label}" >>"${outfile}"
     # version‐file diff
-    if [ -n "$found_version_file" ]; then
-        {
-            echo ""
-            version_diff=""
-            if [ -n "${diff_spec}" ]; then
-                # shellcheck disable=SC2086
-                version_diff="$(git --no-pager diff $diff_spec \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "${found_version_file}" \
-                    | grep -Ei '^[+-].*version' || true)"
-            else
-                # shellcheck disable=SC2086
-                version_diff="$(git --no-pager diff \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no "${found_version_file}" \
-                    | grep -Ei '^[+-].*version' || true)"
-            fi
-            if [ -n "${version_diff}" ]; then
-                parsed_version=$(parse_version "${version_diff}")
-                echo "**Version:** ${parsed_version}" >>"${outfile}"
-            else
-
-                echo "**Version:** ${be_version}" >>"${outfile}"
-            fi
-        } >>"${outfile}"
-        # [ "$debug" = false ] && echo "$found_version_file" >>"$outfile"
-    fi
-
-    if [ -n "$diff_spec" ] && [ "$diff_spec" != "--cached" ]; then
-        printf 'Commit %s\n' "${diff_spec:-Working Tree}"
-        {
-            echo "**Commit:** $(git show -s --format=%s "${diff_spec}" || true)"
-            echo "**Date:**   $(git show -s --format=%ci "${diff_spec}" || true)"
-            echo "**Message:**"
-            git show -s --format=%B "${diff_spec}"
-            echo
-        } >>"$outfile"
-    fi
-
-    printf 'Set header\n'
-
-    if [ "$debug" = "true" ]; then
-        git --no-pager diff --unified=0 -- "*todo*"
-    fi
-    if [ -n "${todo_pattern}" ]; then
-        {
-            if [ -n "$diff_spec" ]; then
-                todo_diff=$(git --no-pager diff "$diff_spec" --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern") # | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
-            else
-                todo_diff=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "$todo_pattern") # | grep '^[+-]' | grep -Ev '^[+-]{2,}' || true)
-            fi
-            if [ -n "$todo_diff" ]; then
-                echo ""
-                echo "### Changes in TODOs"
-                echo '```diff'
-                printf '%s\n' "$todo_diff"
-                echo '```'
-            fi
-        } >>"$outfile"
-    fi
-
-    printf 'Set todo diff\n'
-
-    if [ -n "$include_pattern" ]; then
-        if ! git ls-files -- "*$include_pattern*" >/dev/null 2>&1; then
-            echo "Error: Invalid --include-pattern '$include_pattern' (no matching files or invalid pattern)." >&2
-            exit 1
-        fi
-    fi
-    if [ -n "$exclude_pattern" ]; then
-        if ! git ls-files -- ":(exclude)*$exclude_pattern*" >/dev/null 2>&1; then
-            echo "Error: Invalid --exclude-pattern '$exclude_pattern' (no matching files or invalid pattern)." >&2
-            exit 1
-        fi
-    fi
-    if [ -n "$include_pattern" ]; then
-        include_arg="*$include_pattern*"
-    fi
-    if [ -n "$exclude_pattern" ]; then
-        exclude_arg=":(exclude)*$exclude_pattern*"
-    fi
-
-    printf 'Set include/exclude args: %s\n' "$include_arg $exclude_arg"
-
-    printf 'diff options: %s\n' "$default_diff_options"
-    {
-        echo ""
-        echo "### Changes in files"
-        echo '```diff'
-
-        if [ -n "$diff_spec" ]; then
-            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options" >&2
-            if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-                git --no-pager diff "$diff_spec" \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
-            elif [ -n "$exclude_arg" ]; then
-                git --no-pager diff "$diff_spec" \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$exclude_arg"
-            elif [ -n "$include_arg" ]; then
-                git --no-pager diff "$diff_spec" \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$include_arg"
-            else
-                git --no-pager diff "$diff_spec" \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no
-            fi
+    if [ -n "${found_version_file}" ] && [ -f "${found_version_file}" ]; then
+        tmpver=$(mktemp)
+        trap 'rm -f "$tmpver"' EXIT
+        version_diff=""
+        if [ -n "${diff_spec}" ]; then
+            version_diff=$(git --no-pager diff "${diff_spec}" \
+            --minimal --no-prefix --unified=0 --no-color -b -w \
+            --compact-summary --color-moved=no -- "${found_version_file}" \
+            | grep -Ei '^[+].*version' || true)
         else
-            printf 'git --no-pager diff %s\n' "$diff_spec $default_diff_options" >&2
-
-            if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
-                git --no-pager diff \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
-            elif [ -n "$include_arg" ]; then
-                git --no-pager diff \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$include_arg"
-            elif [ -n "$exclude_arg" ]; then
-                git --no-pager diff \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no -- "$exclude_arg"
+            version_diff=$(git --no-pager diff --minimal --no-prefix --unified=0 \
+            --no-color -b -w --compact-summary --color-moved=no -- "${found_version_file}" \
+            | grep -Ei '^[+].*version' || true)
+        fi
+        if [ -n "${version_diff}" ]; then
+            parsed_version=$(parse_version "${version_diff}")
+            printf '\n**Version:** %s (updated)\n' "${parsed_version}" >>"${outfile}"
+        else
+            # Fallback: parse current version from file if available
+            current_file_version=$(get_current_version_from_file "${found_version_file}")
+            if [ -n "${current_file_version}" ]; then
+                printf '\n**Version:** %s (current)\n' "${current_file_version}" >>"${outfile}"
             else
-                git --no-pager diff \
-                    --minimal --no-prefix --unified=0 --no-color -b -w \
-                    --compact-summary --color-moved=no
+                printf '\n**Version:** %s (arg)\n' "${be_version}" >>"${outfile}"
             fi
         fi
-        echo '```'
-        echo ""
-    } >>"$outfile"
+        rm -f "${tmpver}"
+        trap - EXIT
+    fi
+    if [ -n "${diff_spec}" ] && [ "${diff_spec}" != "--cached" ]; then
+        commit_hash=$(echo "${diff_spec}" | sed 's/\^!$//')
+        {
+            printf '**Commit:** %s\n' "${commit_hash}"
+            printf '**Date:**   %s\n' "$(git show -s --format=%ci "${commit_hash}" 2>/dev/null || true)"
+            printf '**Message:**\n'
+            git show -s --format=%B "${commit_hash}"
+            printf '\n'
+        } >>"${outfile}"
+    fi
+    [ "${debug:-false}" = "true" ] && git --no-pager diff --unified=0 -- "*todo*" >&2
+    if [ -n "${todo_pattern}" ]; then
+        if [ -n "${diff_spec}" ]; then
+            todo_diff=$(git --no-pager diff "${diff_spec}" --unified=0 -b -w --no-prefix --color=never -- "${todo_pattern}")
+        else
+            todo_diff=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "${todo_pattern}")
+        fi
+        if [ -n "$todo_diff" ]; then
+            printf '\n### Changes in TODOs\n' >>"$outfile"
+            printf '```diff\n' >>"$outfile"
+            printf '%s\n' "$todo_diff" >>"$outfile"
+            printf '```\n' >>"$outfile"
+        fi
+    fi
+    # Validate include/exclude patterns
+    if [ -n "${include_pattern}" ]; then
+        if ! git ls-files -- "*${include_pattern}*" >/dev/null 2>&1; then
+            printf 'Error: Invalid --include-pattern %s (no matching files or invalid pattern).\n' "${include_pattern}" >&2
+            exit 1
+        fi
+        include_arg="*${include_pattern}*"
+    fi
+    if [ -n "${exclude_pattern}" ]; then
+        if ! git ls-files -- ":(exclude)*${exclude_pattern}*" >/dev/null 2>&1; then
+            printf 'Error: Invalid --exclude-pattern %s (no matching files or invalid pattern).\n' "${exclude_pattern}" >&2
+            exit 1
+        fi
+        exclude_arg=":(exclude)*${exclude_pattern}*"
+    fi
+    [ "${debug:-false}" = "true" ] && printf 'Set include/exclude args: %s %s\n' "$include_arg" "$exclude_arg" >&2
+    printf '\n### Changes in files\n' >>"$outfile"
+    printf '```diff\n' >>"$outfile"
+    run_git_diff "${diff_spec}" "$include_arg" "$exclude_arg" >>"$outfile"
+    printf '```\n\n' >>"$outfile"
+    if [ "${debug:-false}" = "true" ]; then
+        printf 'History output:\n' >&2
+        cat "$outfile" >&2
+    fi
+}
 
-    if [ "$debug" = "true" ]; then
-        echo "History output:" && cat "$outfile"
+# Helper to run git diff with standard options, supporting include/exclude args
+run_git_diff() {
+    diff_spec="$1"
+    include_arg="$2"
+    exclude_arg="$3"
+    if [ -n "${diff_spec}" ]; then
+        if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
+            git --no-pager diff "${diff_spec}" \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
+        elif [ -n "$exclude_arg" ]; then
+            git --no-pager diff "${diff_spec}" \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$exclude_arg"
+        elif [ -n "$include_arg" ]; then
+            git --no-pager diff "${diff_spec}" \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$include_arg"
+        else
+            git --no-pager diff "${diff_spec}" \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no
+        fi
+    else
+        if [ -n "$include_arg" ] && [ -n "$exclude_arg" ]; then
+            git --no-pager diff \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$include_arg" "$exclude_arg"
+        elif [ -n "$include_arg" ]; then
+            git --no-pager diff \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$include_arg"
+        elif [ -n "$exclude_arg" ]; then
+            git --no-pager diff \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "$exclude_arg"
+        else
+            git --no-pager diff \
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no
+        fi
     fi
 }
 
@@ -364,7 +342,7 @@ generate_prompt() {
 run_ollama() {
     model="$1"
     prompt_file_path="$2"
-    if [ "$debug" = "true" ]; then
+    if [ "${debug}" = "true" ]; then
         ollama run "$model" --verbose <"$prompt_file_path"
     else
         ollama run "$model" <"$prompt_file_path"
@@ -393,12 +371,12 @@ generate_remote() {
             '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
         # echo "Request body: $body" >&2
     fi
-    response=$(curl -s -X POST "$api_url" \
-        -H "Authorization: Bearer $api_key" \
+    response=$(curl -s -X POST "${api_url}" \
+        -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
-        -d "$body")
+        -d "${body}")
 
-    # if [ "$debug" = "true" ]; then
+    # if [ "${debug}" = "true" ]; then
     #     echo "Response from remote API:" >&2
     #     echo "$response" >&2
     # fi
@@ -431,7 +409,7 @@ generate_changelog() {
     cg_mode="$4"
     cg_existing="$5"
     changelog_response=$(generate_response)
-    if [ "$debug" = "true" ]; then
+    if [ "${debug}" = "true" ]; then
         echo ""
         echo "## Changelog (generated by changeish using $cg_model)"
         echo '```'
@@ -487,7 +465,7 @@ update_changelog_section() {
     ic_version="$3"
     ic_pattern="$4"
     content_file=$(mktemp)
-    printf "%s\n" "$ic_content" > "$content_file"
+    printf "%s\n" "$ic_content" >"$content_file"
     if grep -qE "$ic_pattern" "$ic_file"; then
         awk -v pat="$ic_pattern" -v ver="$ic_version" -v content_file="$content_file" '
             BEGIN { in_section=0; replaced=0 }
@@ -519,7 +497,7 @@ prepend_changelog_section() {
     ic_content="$2"
     ic_version="$3"
     content_file=$(mktemp)
-    printf "%s\n" "$ic_content" > "$content_file"
+    printf "%s\n" "$ic_content" >"$content_file"
     awk -v ver="$ic_version" -v content_file="$content_file" '
         BEGIN { added=0 }
         /^# / && !added { print; print ""; print "## " ver; while ((getline line < content_file) > 0) print line; close(content_file); print ""; added=1; next }
@@ -535,7 +513,7 @@ append_changelog_section() {
     ic_content="$2"
     ic_version="$3"
     content_file=$(mktemp)
-    printf "%s\n" "$ic_content" > "$content_file"
+    printf "%s\n" "$ic_content" >"$content_file"
     awk -v ver="$ic_version" -v content_file="$content_file" '
         { print }
         END { print ""; print "## " ver; while ((getline line < content_file) > 0) print line; close(content_file); print "" }
@@ -589,21 +567,21 @@ update_changelog() {
         ;;
     esac
 
-    if ! tail -n 5 "$ic_file" | grep -q "Managed by changeish"; then
-        printf '\n[Managed by changeish](https://github.com/itlackey/changeish)\n\n' >>"$ic_file"
+    if ! tail -n 5 "${ic_file}" | grep -q "Managed by changeish"; then
+        printf '\n[Managed by changeish](https://github.com/itlackey/changeish)\n\n' >>"${ic_file}"
     fi
-    remove_duplicate_blank_lines "$ic_file"
+    remove_duplicate_blank_lines "${ic_file}"
 }
 
 parse_version() {
     # Extracts version numbers like v1.2.3, 1.2.3, or "1.2.3" from a string argument, preserving the v if present
     output=$(echo "$1" | sed -n -E 's/.*([vV][0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
 
-    if [ -z "$output" ]; then
+    if [ -z "${output}" ]; then
         output=$(echo "$1" | sed -n -E 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
     fi
 
-    echo "$output"
+    echo "${output}"
 }
 
 get_current_version_from_file() {
@@ -614,8 +592,8 @@ get_current_version_from_file() {
     fi
 
     version=$(parse_version "$(grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$file")")
-    if [ -n "$version" ]; then
-        echo "$version"
+    if [ -n "${version}" ]; then
+        echo "${version}"
         return 0
     fi
 
@@ -849,7 +827,7 @@ main() {
     auto)
         echo "Generation mode auto..." >&2
         if ! command -v ollama >/dev/null 2>&1; then
-            if [ "$debug" = "true" ]; then
+            if [ "${debug}" = "true" ]; then
                 echo "ollama not found, falling back to remote API."
             fi
             remote="true"
@@ -865,7 +843,7 @@ main() {
                 should_generate_changelog="false"
             fi
         elif ! ollama list >/dev/null 2>&1; then
-            if [ "$debug" = "true" ]; then
+            if [ "${debug}" = "true" ]; then
                 echo "ollama daemon not running, falling back to remote API."
             fi
             remote="true"
@@ -928,23 +906,30 @@ main() {
             exit 1
         fi
     else
+        [ "${debug:-false}" = "true" ] && echo "Default version files: $default_version_files" >&2         
+        # OLDIFS="$IFS"
+        # IFS=' '
         for vf in $default_version_files; do
+            [ "${debug:-false}" = "true" ] && echo "Checking for version file: $vf" >&2
             if [ -f "$vf" ]; then
                 found_version_file="$vf"
+                [ "${debug:-false}" = "true" ] && echo "Found version file: $found_version_file" >&2
                 break
             fi
         done
+        #IFS="$OLDIFS"
+        [ "${debug:-false}" = "true" ] && echo "Final found_version_file: $found_version_file" >&2
     fi
 
-    if [ -z "$section_name" ] || [ "$section_name" = "auto" ]; then
-        if [ -n "$found_version_file" ]; then
-            current_version=$(get_current_version_from_file "$found_version_file")
-            if [ "$debug" = "true" ]; then
-                echo "Found version file: $found_version_file"
-                echo "Current version: $current_version"
+    if [ -z "${section_name}" ] || [ "${section_name}" = "auto" ]; then
+        if [ -n "${found_version_file}" ]; then
+            current_version=$(get_current_version_from_file "${found_version_file}")
+            if [ "${debug}" = "true" ]; then
+                echo "Found version file: ${found_version_file}"
+                echo "Current version: ${current_version}"
             fi
-            if [ -n "$current_version" ]; then
-                section_name="$current_version"
+            if [ -n "${current_version}" ]; then
+                section_name="${current_version}"
             else
                 section_name="Current Changes"
             fi
@@ -952,11 +937,11 @@ main() {
             section_name="Current Changes"
         fi
     fi
-    echo "Using section name: $section_name"
+    echo "Using section name: ${section_name}"
 
-    existing_changelog_section=$(extract_changelog_section "$section_name" "$changelog_file")
+    existing_changelog_section=$(extract_changelog_section "${section_name}" "${changelog_file}")
 
-    if [ "$debug" = "true" ]; then
+    if [ "${debug}" = "true" ]; then
         echo "## Settings"
         echo "Debug mode enabled."
         echo "Using model: $model"
@@ -1002,7 +987,7 @@ main() {
             echo "No commits found in range ${range_spec}" >&2
             exit 1
         fi
-        if [ "$debug" = "true" ]; then
+        if [ "${debug}" = "true" ]; then
             echo "Commits list:"
             echo "$commits_list"
         fi

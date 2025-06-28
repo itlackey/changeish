@@ -61,8 +61,11 @@ jobs:
       - name: Syntax check in bash
         run: bash --posix -n ./changes.sh
 
+      - name: Located zsh binary
+        run: "echo \"ZSH binary is at: $(which zsh)\""
+        
       - name: Syntax check in zsh
-        run: zsh -n ./changes.sh
+        run: /usr/bin/zsh -n ./changes.sh
 
       - name: Syntax check in sh
         run: sh -n ./changes.sh
