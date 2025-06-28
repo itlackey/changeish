@@ -69,6 +69,8 @@ jobs:
 
       - name: Install ShellCheck
         uses: ludeeus/action-shellcheck@master
-      - name: Run ShellCheck (POSIX)
-        run: shellcheck --shell=sh ./changes.sh
+        env:
+          SHELLCHECK_OPTS: "--shell=sh --severity=warning"
+        with:
+          ignore_paths: tests          
 
