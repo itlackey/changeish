@@ -193,12 +193,19 @@ EOF
 
 @test "Config: Load .env file" {
   echo "x" >file.txt && git add file.txt && git commit -m "init"
-  echo "CHANGEISH_MODEL=MY_MODEL" >.env
   mock_ollama "MY_MODEL" ""
-  run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
-  cat "$ERROR_LOG" >&3
-  assert_success
-  echo "$output" | grep -q "Using model: MY_MODEL"
+  echo "CHANGEISH_MODEL=MY_MODEL" >"$BATS_TEST_DIRNAME/.env"
+  cat "$BATS_TEST_DIRNAME/.env" >&3
+  if [ -f "$BATS_TEST_DIRNAME/.env" ]; then
+    echo "Using existing .env file from $BATS_TEST_DIRNAME/.env"
+
+    run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
+    #cat "$ERROR_LOG" >&3
+    assert_success
+    echo "$output" | grep -q "Using model: MY_MODEL"
+  else
+    echo "Could not create .env file, skipping test."
+  fi
 }
 
 @test "Config: default model" {
