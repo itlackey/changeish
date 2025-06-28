@@ -242,42 +242,42 @@ EOF
 
 }
 
-# @test "handles multiline content" {
-#  export debug="true"
-#     cat >CHANGELOG.md <<EOF
-# # Changelog
+@test "handles multiline content" {
+ export debug="true"
+    cat >CHANGELOG.md <<EOF
+# Changelog
 
-# ## v11.0.0
-# - keep
-# EOF
+## v11.0.0
+- keep
+EOF
 
-# cat >changes.md <<EOF
-# - line1
-# - line2
-# - line3
-# EOF
-#     printf "Changes:\n%s\n" "$( <changes.md )" >>"$ERROR_LOG"
-#     run update_changelog CHANGELOG.md "$( <changes.md )" "v11.0.0" update
-#     printf "Change log:\n%s\n" "$( <CHANGELOG.md )" >>"$ERROR_LOG"
-#     assert_success
-#     grep -qF -- "- line1" CHANGELOG.md || {
-#         echo "Expected '- line1' in CHANGELOG.md" >>"$ERROR_LOG"
-#         cat CHANGELOG.md >>"$ERROR_LOG"
-#         false
-#     }
-#     grep -qF -- "- line2" CHANGELOG.md || {
-#         echo "Expected '- line2' in CHANGELOG.md" >>"$ERROR_LOG"
-#         cat CHANGELOG.md >>"$ERROR_LOG"
-#         false
-#     }
-#     grep -qF -- "- line3" CHANGELOG.md || {
-#         echo "Expected '- line3' in CHANGELOG.md" >>"$ERROR_LOG"
-#         cat CHANGELOG.md >>"$ERROR_LOG"
-#         false
-#     }
-#     echo "Changelog created successfully" >>"$ERROR_LOG"
-#     cat CHANGELOG.md >>"$ERROR_LOG"
-# }
+cat >changes.md <<EOF
+- line1
+- line2
+- line3
+EOF
+    printf "Changes:\n%s\n" "$( <changes.md )" >>"$ERROR_LOG"
+    run update_changelog CHANGELOG.md "$( <changes.md )" "v11.0.0" update
+    printf "Change log:\n%s\n" "$( <CHANGELOG.md )" >>"$ERROR_LOG"
+    assert_success
+    grep -qF -- "- line1" CHANGELOG.md || {
+        echo "Expected '- line1' in CHANGELOG.md" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    grep -qF -- "- line2" CHANGELOG.md || {
+        echo "Expected '- line2' in CHANGELOG.md" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    grep -qF -- "- line3" CHANGELOG.md || {
+        echo "Expected '- line3' in CHANGELOG.md" >>"$ERROR_LOG"
+        cat CHANGELOG.md >>"$ERROR_LOG"
+        false
+    }
+    echo "Changelog created successfully" >>"$ERROR_LOG"
+    cat CHANGELOG.md >>"$ERROR_LOG"
+}
 
 # @test "no duplicate headers and only one first-level heading" {
 #     cat >CHANGELOG.md <<EOF

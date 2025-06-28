@@ -469,19 +469,34 @@ remove_duplicate_blank_lines() {
     awk 'NR==1{print} NR>1{if (!($0=="" && p=="")) print} {p=$0} END{if(p!="")print ""}' "$1" >"$1.tmp" && mv "$1.tmp" "$1"
 }
 
+# Updates a specific section in a changelog file, or adds it if not present.
+# Arguments:
+#   $1 - Path to the changelog file.
+#   $2 - Content to insert into the changelog section.
+#   $3 - Version string to use as the section header.
+#   $4 - Regex pattern to identify the section to replace.
+#
+# If a section matching the given pattern exists, it is replaced with the new content.
+# Otherwise, the new section is inserted after the first H1 header, or appended to the end if no H1 exists.
+#
+# To avoid awk errors with multiline content, use a temp file for content and read with getline.
+
 update_changelog_section() {
     ic_file="$1"
     ic_content="$2"
     ic_version="$3"
     ic_pattern="$4"
+    content_file=$(mktemp)
+    printf "%s\n" "$ic_content" > "$content_file"
     if grep -qE "$ic_pattern" "$ic_file"; then
-        awk -v pat="$ic_pattern" -v ver="$ic_version" -v content="$ic_content" '
+        awk -v pat="$ic_pattern" -v ver="$ic_version" -v content_file="$content_file" '
             BEGIN { in_section=0; replaced=0 }
             {
                 if ($0 ~ pat && !replaced) {
                     print "";
                     print "## " ver;
-                    print content;
+                    while ((getline line < content_file) > 0) print line;
+                    close(content_file);
                     in_section=1;
                     replaced=1;
                     next
@@ -490,8 +505,10 @@ update_changelog_section() {
                 if (!in_section) print $0
             }
             ' "$ic_file" | ensure_blank_lines >"$ic_file.tmp" && mv "$ic_file.tmp" "$ic_file"
+        rm -f "$content_file"
         return 0
     else
+        rm -f "$content_file"
         return 1
     fi
 }
@@ -501,13 +518,15 @@ prepend_changelog_section() {
     ic_file="$1"
     ic_content="$2"
     ic_version="$3"
-    # Insert after first H1 or at top if no H1
-    awk -v ver="$ic_version" -v content="$ic_content" '
+    content_file=$(mktemp)
+    printf "%s\n" "$ic_content" > "$content_file"
+    awk -v ver="$ic_version" -v content_file="$content_file" '
         BEGIN { added=0 }
-        /^# / && !added { print; print ""; print "## " ver; print content; print ""; added=1; next }
+        /^# / && !added { print; print ""; print "## " ver; while ((getline line < content_file) > 0) print line; close(content_file); print ""; added=1; next }
         { print }
-        END { if (!added) { print "## " ver; print content; print "" } }
+        END { if (!added) { print "## " ver; while ((getline line < content_file) > 0) print line; close(content_file); print "" } }
         ' "$ic_file" | ensure_blank_lines >"$ic_file.tmp" && mv "$ic_file.tmp" "$ic_file"
+    rm -f "$content_file"
 }
 
 # append_changelog_section: Always inserts a new section at the bottom, even if duplicate exists.
@@ -515,11 +534,13 @@ append_changelog_section() {
     ic_file="$1"
     ic_content="$2"
     ic_version="$3"
-    # Insert at end of file
-    awk -v ver="$ic_version" -v content="$ic_content" '
+    content_file=$(mktemp)
+    printf "%s\n" "$ic_content" > "$content_file"
+    awk -v ver="$ic_version" -v content_file="$content_file" '
         { print }
-        END { print ""; print "## " ver; print content; print "" }
+        END { print ""; print "## " ver; while ((getline line < content_file) > 0) print line; close(content_file); print "" }
         ' "$ic_file" | ensure_blank_lines >"$ic_file.tmp" && mv "$ic_file.tmp" "$ic_file"
+    rm -f "$content_file"
 }
 
 update_changelog() {
