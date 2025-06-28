@@ -1034,8 +1034,11 @@ main() {
     fi
 }
 
-# Only run main if this script is executed, not sourced (POSIX compatible)
 script_name="$(basename -- "$0")"
 if [ "$script_name" = "changes.sh" ] || [ "$script_name" = "changeish" ]; then
     main "$@"
+else
+    printf 'This script is intended to be run directly, not sourced.\n' >&2
+    printf 'Please run it as: %s [options]\n' "$script_name"
+    printf 'For help, use: %s --help\n' "$script_name"
 fi
