@@ -1035,6 +1035,6 @@ main() {
 }
 
 # Only run main if this script is executed, not sourced (POSIX compatible)
-if [ "$(basename -- "$0")" = "changes.sh" ]; then
+if [ "$(basename -- "$0")" = "changes.sh" ] || [ "$(basename -- "$0")" = "changesish" ]; then
     main "$@"
 fi
