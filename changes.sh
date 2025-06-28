@@ -56,7 +56,7 @@
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
 # END_HELP
-#set -eu
+set -e
 
 # Initialize default option values
 debug="false"
@@ -161,7 +161,8 @@ show_available_releases() {
 #   exclude_pattern    - pattern for excluding files from full diff
 # Arguments:
 #   $1: label to display (hash or “Staged Changes” / “Working Tree”)
-#   $2: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
+#   $2: version string (if available, otherwise empty)
+#   $3: git diff range (e.g. "<hash>^!" or "--cached" or empty for worktree)
 build_entry() {
     label="$1"
     be_version="$2"
@@ -381,9 +382,15 @@ generate_remote() {
     # json_payload=$(jq -n --arg model "$remote_model" --arg content "$content" \
     #     '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
 
-    body=$(jq -n --arg model "$remote_model" --arg content "$content" \
-        '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
-    # echo "Request body: $body" >&2
+    # if jq is not available, use a simple JSON format
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "jq not found, using simple JSON format" >&2
+        body="{\"model\":\"$remote_model\",\"messages\":[{\"role\":\"user\",\"content\":\"$content\"}],\"max_completion_tokens\":8192}"
+    else
+        body=$(jq -n --arg model "$remote_model" --arg content "$content" \
+            '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
+        # echo "Request body: $body" >&2
+    fi
     response=$(curl -s -X POST "$api_url" \
         -H "Authorization: Bearer $api_key" \
         -H "Content-Type: application/json" \
@@ -962,7 +969,7 @@ main() {
         if [ -z "$from_rev" ]; then from_rev="HEAD"; fi
         if [ "$all_history" = "true" ]; then
             echo "Using commit range: --all (all history)"
-            commits_list=$(git rev-list --reverse --all)
+            commits_list=$(git rev-list --all)
         else
             range_spec="${to_rev}^..${from_rev}"
             echo "Using commit range: ${range_spec}"
@@ -972,6 +979,13 @@ main() {
             echo "No commits found in range ${range_spec}" >&2
             exit 1
         fi
+        if [ "$debug" = "true" ]; then
+            echo "Commits list:"
+            echo "$commits_list"
+        fi
+
+        git --no-pager log
+
         start_commit=$(echo "$commits_list" | head -1)
         end_commit=$(echo "$commits_list" | tail -1)
         start_date=$(git show -s --format=%ci "$start_commit")
@@ -983,7 +997,7 @@ main() {
         IFS='
 '
         for commit in $commits_list; do
-            build_entry "$commit" "" "$commit"
+            build_entry "$commit" "" "$commit^!"
         done
         IFS="$OLDIFS"
         echo "Generated git history in $outfile."

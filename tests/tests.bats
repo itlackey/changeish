@@ -54,9 +54,9 @@ teardown() {
 # Helper: create commits a, b, c
 generate_commits() {
   echo "bin" >.gitignore && git add .gitignore
-  echo "a" >a.txt && git add a.txt && git commit -m "a"
-  echo "b" >b.txt && git add b.txt && git commit -m "b"
-  echo "c" >c.txt && git add c.txt && git commit -m "c"
+  echo "a" >a.txt && git add a.txt && git commit -m "add a.txt"
+  echo "b" >b.txt && git add b.txt && git commit -m "add b.txt"
+  echo "c" >c.txt && git add c.txt && git commit -m "add c.txt"
 }
 
 # Helper: mock a local ollama binary that prints a message
@@ -253,23 +253,33 @@ EOF
   echo "x" >file.txt && git add file.txt && git commit -m "init"
   echo "staged content" >file.txt && git add file.txt
   run "$CHANGEISH_SCRIPT" --staged --save-history
+  cat history.md >>$ERROR_LOG
   assert_success
   grep -q "Staged Changes" history.md
 }
 
 @test "Mode: all" {
-  generate_commits
+  #generate_commits
+  rm -rf .git
+  rm -f *.txt
+  git init -q
+
+  echo "bin" >.gitignore && git add .gitignore && git commit -m "add .gitignore"
+  echo "a" >a.txt && git add a.txt && git commit -m "add a.txt"
+  echo "b" >b.txt && git add b.txt && git commit -m "add b.txt"
+  echo "c" >c.txt && git add c.txt && git commit -m "add c.txt"
+
   run "$CHANGEISH_SCRIPT" --all --save-history --debug
   assert_success
   cat history.md >>$ERROR_LOG
   echo "Checking all commits" >>$ERROR_LOG
   grep -q "\*\*Commit:\*\*" history.md
   echo "Checking for commit a" >>$ERROR_LOG
-  grep -q "a" history.md
+  grep -q "add a.txt" history.md
   echo "Checking for commit b" >>$ERROR_LOG
-  grep -q "b" history.md
+  grep -q "add b.txt" history.md
   echo "Checking for commit c" >>$ERROR_LOG
-  grep -q "c" history.md
+  grep -q "add c.txt" history.md
   printf 'Test Passed\n' >>$ERROR_LOG
 }
 
