@@ -182,13 +182,13 @@ build_entry() {
         version_diff=""
         if [ -n "${diff_spec}" ]; then
             version_diff=$(git --no-pager diff "${diff_spec}" \
-            --minimal --no-prefix --unified=0 --no-color -b -w \
-            --compact-summary --color-moved=no -- "${found_version_file}" \
-            | grep -Ei '^[+].*version' || true)
+                --minimal --no-prefix --unified=0 --no-color -b -w \
+                --compact-summary --color-moved=no -- "${found_version_file}" |
+                grep -Ei '^[+].*version' || true)
         else
             version_diff=$(git --no-pager diff --minimal --no-prefix --unified=0 \
-            --no-color -b -w --compact-summary --color-moved=no -- "${found_version_file}" \
-            | grep -Ei '^[+].*version' || true)
+                --no-color -b -w --compact-summary --color-moved=no -- "${found_version_file}" |
+                grep -Ei '^[+].*version' || true)
         fi
         if [ -n "${version_diff}" ]; then
             parsed_version=$(parse_version "${version_diff}")
@@ -762,8 +762,8 @@ main() {
     done
 
     if [ -n "${make_prompt_template_path-}" ]; then
-        printf '%s\n' "$default_prompt" >"$make_prompt_template_path"
-        echo "Default prompt template written to $make_prompt_template_path."
+        printf '%s\n' "${default_prompt}" >"${make_prompt_template_path}"
+        echo "Default prompt template written to ${make_prompt_template_path}."
         exit 0
     fi
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -775,26 +775,28 @@ main() {
         exit 1
     fi
 
-    if [ "$save_history" = "true" ]; then
+    if [ "${save_history}" = "true" ]; then
         outfile="history.md"
     else
         outfile=$(mktemp)
     fi
-    if [ "$save_prompt" = "true" ]; then
+    if [ "${save_prompt}" = "true" ]; then
         prompt_file="prompt.md"
     else
         prompt_file=$(mktemp)
     fi
 
-    if [ -n "$config_file" ]; then
-        if [ -f "$config_file" ]; then
+    if [ -n "${config_file}" ]; then
+        if [ -f "${config_file}" ]; then
+            [ "${debug}" = "true" ] && printf 'Loading config file: %s\n' "${config_file}" >&2
             # shellcheck disable=SC1090
-            . "$config_file"
+            . "${config_file}"
         else
-            echo "Error: config file '$config_file' not found." >&2
+            echo "Error: config file '${config_file}' not found." >&2
             exit 1
         fi
     elif [ -f .env ]; then
+        [ "${debug}" = "true" ] && printf 'Loading config file: %s/.env\n' "${PWD}" >&2
         # shellcheck disable=SC1091
         . .env
     fi
@@ -906,7 +908,7 @@ main() {
             exit 1
         fi
     else
-        [ "${debug:-false}" = "true" ] && echo "Default version files: $default_version_files" >&2         
+        [ "${debug:-false}" = "true" ] && echo "Default version files: $default_version_files" >&2
         # OLDIFS="$IFS"
         # IFS=' '
         for vf in $default_version_files; do

@@ -54,16 +54,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
-      - name: Install ShellCheck
-        uses: ludeeus/action-shellcheck@master
-
+      
       - name: Syntax check in bash
         run: bash --posix -n ./changes.sh
 
       - name: Located zsh binary
         run: "echo \"ZSH binary is at: $(which zsh)\""
-        
+
       - name: Syntax check in zsh
         run: /usr/bin/zsh -n ./changes.sh
 
@@ -76,6 +73,8 @@ jobs:
       - name: Syntax check in ash
         run: ash -n ./changes.sh
         
+      - name: Install ShellCheck
+        uses: ludeeus/action-shellcheck@master
       - name: Run ShellCheck (POSIX)
         run: shellcheck --shell=sh ./changes.sh
 
