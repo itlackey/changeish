@@ -31,6 +31,8 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y dash
           fi
+      - name: Located dash binary
+        run: "echo \"DASH binary is at: $(which dash)\""
 
       - name: Ensure zsh is installed
         id: install-zsh
@@ -39,36 +41,32 @@ jobs:
             sudo apt-get update
             sudo apt-get install -y zsh
           fi
-
+      - name: Located zsh binary
+        run: "echo \"ZSH binary is at: $(which zsh)\""
       - name: Ensure ash is installed
         id: install-ash
         run: |
           if ! command -v ash >/dev/null; then
             sudo apt-get update
-            sudo apt-get install -y busybox
+            sudo apt-get install -y ash
           fi
+      - name: Located ash binary
+        run: "echo \"ASH binary is at: $(which ash)\""
 
-      - name: Located zsh binary
-        run: "echo \"ZSH binary is at: $(which zsh)\""
-        
+
       - uses: actions/checkout@v3
 
       - name: Syntax check in bash
         run: bash --posix -n ./changes.sh
       - name: Syntax check in sh
         run: sh -n ./changes.sh
-
       - name: Syntax check in dash
         run: dash -n ./changes.sh
-
+      - name: Syntax check in zsh
+        run: /usr/bin/zsh -n ./changes.sh
       - name: Syntax check in ash
         run: ash -n ./changes.sh
 
-
-      - name: Syntax check in zsh
-        run: /usr/bin/zsh -n ./changes.sh
-
-        
       - name: Install ShellCheck
         uses: ludeeus/action-shellcheck@master
       - name: Run ShellCheck (POSIX)
