@@ -798,7 +798,7 @@ main() {
     elif [ -f .env ]; then
         [ "${debug}" = "true" ] && printf 'Loading config file: %s/.env\n' "${PWD}" >&2
         # shellcheck disable=SC1091
-        . .env
+        . "${PWD}/.env"
     fi
 
     if [ "$model_set" = "false" ] && [ -n "${CHANGEISH_MODEL+x}" ] && [ -n "$CHANGEISH_MODEL" ]; then

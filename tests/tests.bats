@@ -200,7 +200,7 @@ EOF
     echo "Using existing .env file from .env"
 
     run "$CHANGEISH_SCRIPT" --current --debug >>$ERROR_LOG
-    #cat "$ERROR_LOG" >&3
+    cat "$ERROR_LOG" >&3
     assert_success
     echo "$output" | grep -q "Using model: MY_MODEL"
   else

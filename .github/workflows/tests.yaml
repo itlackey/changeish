@@ -7,8 +7,21 @@ on:
     branches: [main]
 
 jobs:
-  setup-shells:
-    name: Setup shells
+
+  bats_tests:
+    name: Run Bats tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: bats-core/bats-action@3.0.1
+      - name: Run Bats
+        shell: bash
+        run: bats tests/*.bats
+
+  shell_syntax_checks:
+    name: Syntax & Cross-Shell Checks
     runs-on: ubuntu-latest
     steps:
       - name: Ensure dash is installed
@@ -35,35 +48,13 @@ jobs:
             sudo apt-get install -y busybox
           fi
 
-  bats_tests:
-    name: Run Bats tests
-    needs: setup-shells
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - uses: bats-core/bats-action@3.0.1
-      - name: Run Bats
-        shell: bash
-        run: bats tests/*.bats
-
-  shell_syntax_checks:
-    name: Syntax & Cross-Shell Checks
-    needs: setup-shells
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Syntax check in bash
-        run: bash --posix -n ./changes.sh
-
       - name: Located zsh binary
         run: "echo \"ZSH binary is at: $(which zsh)\""
+        
+      - uses: actions/checkout@v3
 
-      - name: Syntax check in zsh
-        run: /usr/bin/zsh -n ./changes.sh
-
+      - name: Syntax check in bash
+        run: bash --posix -n ./changes.sh
       - name: Syntax check in sh
         run: sh -n ./changes.sh
 
@@ -72,6 +63,11 @@ jobs:
 
       - name: Syntax check in ash
         run: ash -n ./changes.sh
+
+
+      - name: Syntax check in zsh
+        run: /usr/bin/zsh -n ./changes.sh
+
         
       - name: Install ShellCheck
         uses: ludeeus/action-shellcheck@master
