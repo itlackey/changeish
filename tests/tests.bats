@@ -235,7 +235,7 @@ EOF
   cat my_prompt_template.md >>$ERROR_LOG
   [ "$status" -eq 0 ]
   [[ -f "my_prompt_template.md" ]]
-  grep -q '<<<INSTRUCTIONS>>>' my_prompt_template.md
+  grep -q '[INSTRUCTIONS]' my_prompt_template.md
   grep -q 'Output rules' my_prompt_template.md
   echo "$output" | grep -q "Default prompt template written to my_prompt_template.md."
 }
