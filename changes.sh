@@ -56,6 +56,9 @@
 #   CHANGEISH_API_MODEL   Default API model for remote generation (overridden by --api-model)
 #
 # END_HELP
+# Notes:
+# https://keepachangelog.com/en/1.1.0/
+# https://thomasventurini.com/articles/the-best-way-to-work-with-todos-in-vscode/
 set -e
 IFS=' 
 '
@@ -124,9 +127,9 @@ default_version_files="changes.sh package.json pyproject.toml setup.py Cargo.tom
 # Update the script to latest release
 update() {
     latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
-    echo "Updating changeish to version ${latest_version}..."
+    printf 'Updating changeish to version %s...\n' "${latest_version}"
     curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
-    echo "Update complete."
+    printf 'Update complete.\n'
     exit 0
 }
 
@@ -138,11 +141,11 @@ show_version() {
 
 # Print usage information
 show_help() {
-    echo "Version: $(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0" || true)"
+    printf 'Version: %s\n' "$(awk 'NR==3{sub(/^# Version: /, ""); print; exit}' "$0" || true)"
     awk '/^# END_HELP/ {exit} NR>2 && /^#/{sub(/^# ?/, ""); print}' "$0" | sed -e '/^Usage:/,$!d'
-    echo "Default version files to check for version changes:"
+    printf 'Default version files to check for version changes:\n'
     for file in ${default_version_files}; do
-        echo "  ${file}"
+        printf '  %s\n' "${file}"
     done
     exit 0
 }
@@ -265,41 +268,33 @@ run_git_diff() {
     diff_spec="$1"
     include_arg="$2"
     exclude_arg="$3"
+
+    git_args="--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
+    # Prepare file pattern arguments array
+    set --
+    if [ -n "${include_arg}" ]; then
+        set -- "$@" "${include_arg}"
+    fi
+    if [ -n "${exclude_arg}" ]; then
+        set -- "$@" "${exclude_arg}"
+    fi
+
+    # Build the git diff command
     if [ -n "${diff_spec}" ]; then
-        if [ -n "${include_arg}" ] && [ -n "${exclude_arg}" ]; then
-            git --no-pager diff "${diff_spec}" \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${include_arg}" "${exclude_arg}"
-        elif [ -n "${exclude_arg}" ]; then
-            git --no-pager diff "${diff_spec}" \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${exclude_arg}"
-        elif [ -n "${include_arg}" ]; then
-            git --no-pager diff "${diff_spec}" \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${include_arg}"
+        if [ $# -gt 0 ]; then
+            # shellcheck disable=SC2086
+            git --no-pager diff "${diff_spec}" ${git_args} -- "$@"
         else
-            git --no-pager diff "${diff_spec}" \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no
+            # shellcheck disable=SC2086
+            git --no-pager diff "${diff_spec}" ${git_args}
         fi
     else
-        if [ -n "${include_arg}" ] && [ -n "${exclude_arg}" ]; then
-            git --no-pager diff \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${include_arg}" "${exclude_arg}"
-        elif [ -n "${include_arg}" ]; then
-            git --no-pager diff \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${include_arg}"
-        elif [ -n "${exclude_arg}" ]; then
-            git --no-pager diff \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no -- "${exclude_arg}"
+        if [ $# -gt 0 ]; then
+            # shellcheck disable=SC2086
+            git --no-pager diff ${git_args} -- "$@"
         else
-            git --no-pager diff \
-                --minimal --no-prefix --unified=0 --no-color -b -w \
-                --compact-summary --color-moved=no
+            # shellcheck disable=SC2086
+            git --no-pager diff ${git_args}
         fi
     fi
 }
@@ -316,7 +311,7 @@ generate_prompt() {
     gp_template_file="$2"
     gp_existing_section="$3"
     if [ -n "${gp_template_file}" ] && [ -f "${gp_template_file}" ]; then
-        echo "Generating prompt file from template: ${gp_template_file}"
+        printf 'Generating prompt file from template: %s\n' "${gp_template_file}"
         cp "${gp_template_file}" "${prompt_file}"
     else
         printf '%s' "${default_prompt}" >"${prompt_file}"
@@ -367,15 +362,8 @@ generate_remote() {
     # json_payload=$(jq -n --arg model "${remote_model}" --arg content "${content}" \
     #     '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
 
-    # if jq is not available, use a simple JSON format
-    if ! command -v jq >/dev/null 2>&1; then
-        echo "jq not found, using simple JSON format" >&2
-        body="{\"model\":\"${remote_model}\",\"messages\":[{\"role\":\"user\",\"content\":\"${content}\"}],\"max_completion_tokens\":8192}"
-    else
-        body=$(jq -n --arg model "${remote_model}" --arg content "${content}" \
-            '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
-        # echo "Request body: ${body}" >&2
-    fi
+    body="{\"model\":\"${remote_model}\",\"messages\":[{\"role\":\"user\",\"content\":\"${content}\"}],\"max_completion_tokens\":8192}"
+
     response=$(curl -s -X POST "${api_url}" \
         -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
@@ -393,14 +381,14 @@ generate_remote() {
 
 generate_response() {
     if [ "${remote}" = "true" ]; then
-        echo "Generating changelog using model: ${api_model}" >&2
+        printf 'Generating changelog using model: %s\n' "${api_model}" >&2
         response=$(generate_remote "${api_model}" "${prompt_file}")
     else
         if command -v ollama >/dev/null 2>&1; then
-            echo "Generating changelog using model: ${model}" >&2
+            printf 'Generating changelog using model: %s\n' "${model}" >&2
             response=$(run_ollama "${model}" "${prompt_file}")
         else
-            echo "ollama not found, skipping changelog generation." >&2
+            printf 'ollama not found, skipping changelog generation.\n' >&2
             exit 0
         fi
     fi
@@ -422,7 +410,7 @@ generate_changelog() {
         echo '```'
     fi
     update_changelog "${cg_file}" "${changelog_response}" "${cg_section}" "${cg_mode}" "${cg_existing}"
-    echo "Changelog updated in ${cg_file}"
+    printf 'Changelog updated in %s\n' "${cg_file}"
 }
 
 # Helper: ensure blank line before/after header, but not multiple blank lines
@@ -566,7 +554,7 @@ update_changelog() {
         append_changelog_section "${ic_file}" "${ic_content_block}" "${ic_version}"
         ;;
     *)
-        echo "Unknown mode: ${ic_mode}" >&2
+        printf 'Unknown mode: %s\n' "${ic_mode}" >&2
         return 1
         ;;
     esac
@@ -760,7 +748,7 @@ main() {
             shift 2
             ;;
         *)
-            echo "Unknown arg: $1" >&2
+            printf 'Unknown arg: %s\n' "$1" >&2
             exit 1
             ;;
         esac
@@ -768,15 +756,15 @@ main() {
 
     if [ -n "${make_prompt_template_path-}" ]; then
         printf '%s\n' "${default_prompt}" >"${make_prompt_template_path}"
-        echo "Default prompt template written to ${make_prompt_template_path}."
+        printf 'Default prompt template written to %s.\n' "${make_prompt_template_path}"
         exit 0
     fi
     if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-        echo "Error: Not a git repository. Please run this script inside a git repository." >&2
+        printf 'Error: Not a git repository. Please run this script inside a git repository.\n' >&2
         exit 1
     fi
     if ! git rev-parse HEAD >/dev/null 2>&1; then
-        echo "No commits found in repository. Nothing to show." >&2
+        printf 'No commits found in repository. Nothing to show.\n' >&2
         exit 1
     fi
 
@@ -797,7 +785,7 @@ main() {
             # shellcheck disable=SC1090
             . "${config_file}"
         else
-            echo "Error: config file '${config_file}' not found." >&2
+            printf 'Error: config file "%s" not found.\n' "${config_file}" >&2
             exit 1
         fi
     elif [ -f .env ]; then
@@ -832,43 +820,43 @@ main() {
         remote="true"
         ;;
     auto)
-        echo "Generation mode auto..." >&2
+        printf 'Generation mode auto...\n' >&2
         if ! command -v ollama >/dev/null 2>&1; then
             if [ "${debug}" = "true" ]; then
-                echo "ollama not found, falling back to remote API."
+                printf 'ollama not found, falling back to remote API.\n'
             fi
             remote="true"
             if [ -z "${api_key}" ]; then
-                echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
+                printf 'Warning: Falling back to remote but CHANGEISH_API_KEY is not set.\n' >&2
                 remote="false"
                 should_generate_changelog="false"
-                echo "Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set." >&2
+                printf 'Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set.\n' >&2
             fi
             if [ -z "${api_url}" ]; then
-                echo "Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+                printf 'Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
                 remote="false"
                 should_generate_changelog="false"
             fi
         elif ! ollama list >/dev/null 2>&1; then
             if [ "${debug}" = "true" ]; then
-                echo "ollama daemon not running, falling back to remote API."
+                printf 'ollama daemon not running, falling back to remote API.\n'
             fi
             remote="true"
             if [ -z "${api_key}" ]; then
-                echo "Warning: Falling back to remote but CHANGEISH_API_KEY is not set." >&2
+                printf 'Warning: Falling back to remote but CHANGEISH_API_KEY is not set.\n' >&2
                 remote="false"
                 should_generate_changelog="false"
-                echo "Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set." >&2
+                printf 'Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set.\n' >&2
             fi
             if [ -z "${api_url}" ]; then
-                echo "Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL)." >&2
+                printf 'Warning: Changelog generation disabled because no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
                 remote="false"
                 should_generate_changelog="false"
             fi
         fi
         ;;
     *)
-        echo "Unknown --model-provider: ${model_provider}" >&2
+        printf 'Unknown --model-provider: %s\n' "${model_provider}" >&2
         exit 1
         ;;
     esac
@@ -889,7 +877,7 @@ main() {
             fi
         fi
         if [ -n "${missing_api}" ]; then
-            echo "Error: --remote specified but ${missing_api} is not set (use --api-url or CHANGEISH_API_URL for the URL)." >&2
+            printf 'Error: --remote specified but %s is not set (use --api-url or CHANGEISH_API_URL for the URL).\n' "${missing_api}" >&2
             exit 1
         fi
     fi
@@ -898,7 +886,7 @@ main() {
         case "${update_mode}" in
         auto | prepend | append | update) ;;
         *)
-            echo "Error: --update-mode must be one of auto, prepend, append, update." >&2
+            printf 'Error: --update-mode must be one of auto, prepend, append, update.\n' >&2
             exit 1
             ;;
         esac
@@ -909,31 +897,31 @@ main() {
         if [ -f "${version_file}" ]; then
             found_version_file="${version_file}"
         else
-            echo "Error: Specified version file '${version_file}' does not exist." >&2
+            printf 'Error: Specified version file "%s" does not exist.\n' "${version_file}" >&2
             exit 1
         fi
     else
-        [ "${debug:-false}" = "true" ] && echo "Default version files: ${default_version_files}" >&2
+        [ "${debug:-false}" = "true" ] && printf 'Default version files: %s\n' "${default_version_files}" >&2
         # OLDIFS="$IFS"
         # IFS=' '
         for vf in ${default_version_files}; do
-            [ "${debug:-false}" = "true" ] && echo "Checking for version file: ${vf}" >&2
+            [ "${debug:-false}" = "true" ] && printf 'Checking for version file: %s\n' "${vf}" >&2
             if [ -f "${vf}" ]; then
                 found_version_file="${vf}"
-                [ "${debug:-false}" = "true" ] && echo "Found version file: ${found_version_file}" >&2
+                [ "${debug:-false}" = "true" ] && printf 'Found version file: %s\n' "${found_version_file}" >&2
                 break
             fi
         done
         #IFS="$OLDIFS"
-        [ "${debug:-false}" = "true" ] && echo "Final found_version_file: ${found_version_file}" >&2
+        [ "${debug:-false}" = "true" ] && printf 'Final found_version_file: %s\n' "${found_version_file}" >&2
     fi
 
     if [ -z "${section_name}" ] || [ "${section_name}" = "auto" ]; then
         if [ -n "${found_version_file}" ]; then
             current_version=$(get_current_version_from_file "${found_version_file}")
             if [ "${debug}" = "true" ]; then
-                echo "Found version file: ${found_version_file}"
-                echo "Current version: ${current_version}"
+                printf 'Found version file: %s\n' "${found_version_file}"
+                printf 'Current version: %s\n' "${current_version}"
             fi
             if [ -n "${current_version}" ]; then
                 section_name="${current_version}"
@@ -944,59 +932,59 @@ main() {
             section_name="Current Changes"
         fi
     fi
-    echo "Using section name: ${section_name}"
+    printf 'Using section name: %s\n' "${section_name}"
 
     existing_changelog_section=$(extract_changelog_section "${section_name}" "${changelog_file}")
 
     if [ "${debug}" = "true" ]; then
-        echo "## Settings"
-        echo "Debug mode enabled."
-        echo "Using model: ${model}"
-        echo "Remote mode: ${remote}"
-        echo "API URL: ${api_url}"
-        echo "API Model: ${api_model}"
-        echo "Model provider: ${model_provider}"
-        echo "Should generate changelog: ${should_generate_changelog}"
-        echo "Changelog file: ${changelog_file}"
-        echo "Prompt template: ${prompt_template}"
-        echo "Version file: ${found_version_file}"
-        echo "Current Version: ${current_version}"
-        echo "All history: ${all_history}"
-        echo "Current changes: ${current_changes}"
-        echo "Staged changes: ${staged_changes}"
-        echo "Save prompt: ${save_prompt}"
-        echo "Save history: ${save_history}"
-        echo "Include pattern: ${include_pattern}"
-        echo "Exclude pattern: ${exclude_pattern}"
-        echo "TODO pattern: ${todo_pattern}"
-        echo "TODO grep pattern: ${default_todo_grep_pattern}"
-        echo "## End Settings"
+        printf "## Settings\n"
+        printf "Debug mode enabled.\n"
+        printf "Using model: %s\n" "${model}"
+        printf "Remote mode: %s\n" "${remote}"
+        printf "API URL: %s\n" "${api_url}"
+        printf "API Model: %s\n" "${api_model}"
+        printf "Model provider: %s\n" "${model_provider}"
+        printf "Should generate changelog: %s\n" "${should_generate_changelog}"
+        printf "Changelog file: %s\n" "${changelog_file}"
+        printf "Prompt template: %s\n" "${prompt_template}"
+        printf "Version file: %s\n" "${found_version_file}"
+        printf "Current Version: %s\n" "${current_version}"
+        printf "All history: %s\n" "${all_history}"
+        printf "Current changes: %s\n" "${current_changes}"
+        printf "Staged changes: %s\n" "${staged_changes}"
+        printf "Save prompt: %s\n" "${save_prompt}"
+        printf "Save history: %s\n" "${save_history}"
+        printf "Include pattern: %s\n" "${include_pattern}"
+        printf "Exclude pattern: %s\n" "${exclude_pattern}"
+        printf "TODO pattern: %s\n" "${todo_pattern}"
+        printf "TODO grep pattern: %s\n" "${default_todo_grep_pattern}"
+        printf "## End Settings\n"
     fi
 
     if [ "${current_changes}" = "true" ]; then
         build_entry "Working Tree" "${current_version}" ""
-        echo "Generated git history for uncommitted changes in ${outfile}."
+        printf 'Generated git history for uncommitted changes in %s.\n' "${outfile}"
     elif [ "${staged_changes}" = "true" ]; then
         build_entry "Staged Changes" "${current_version}" "--cached"
-        echo "Generated git history for staged changes in ${outfile}."
+        printf 'Generated git history for staged changes in %s.\n' "${outfile}"
     else
         if [ -z "${to_rev}" ]; then to_rev="HEAD"; fi
         if [ -z "${from_rev}" ]; then from_rev="HEAD"; fi
         if [ "${all_history}" = "true" ]; then
-            echo "Using commit range: --all (all history)"
+            printf 'Using commit range: --all (all history)\n'
             commits_list=$(git rev-list --all)
         else
             range_spec="${to_rev}^..${from_rev}"
-            echo "Using commit range: ${range_spec}"
+            printf 'Using commit range: %s\n' "${range_spec}"
             commits_list=$(git rev-list --reverse "${range_spec}")
         fi
         if [ -z "${commits_list}" ]; then
-            echo "No commits found in range ${range_spec}" >&2
+            printf 'No commits found in range %s\n' "${range_spec}" >&2
             exit 1
         fi
         if [ "${debug}" = "true" ]; then
-            echo "Commits list:"
-            echo "${commits_list}"
+            printf 'Commits list:\n'
+            printf '%s\n' "${commits_list}"
         fi
 
         git --no-pager log
@@ -1016,20 +1004,20 @@ main() {
             build_entry "${commit}" "" "${commit}^!"
         done
         IFS="${OLDIFS}"
-        echo "Generated git history in ${outfile}."
+        printf 'Generated git history in %s.\n' "${outfile}"
     fi
 
     generate_prompt "${outfile}" "${prompt_template}" "${existing_changelog_section}"
 
     if [ "${should_generate_changelog}" = "true" ]; then
         if [ ! -f "${changelog_file}" ]; then
-            echo "Creating new changelog file: ${changelog_file}"
-            echo "# Changelog" >"${changelog_file}"
-            echo "" >>"${changelog_file}"
+            printf 'Creating new changelog file: %s\n' "${changelog_file}"
+            printf '# Changelog\n' >"${changelog_file}"
+            printf '\n' >>"${changelog_file}"
         fi
         generate_changelog "${model}" "${changelog_file}" "${section_name}" "${update_mode}" "${existing_changelog_section}"
     else
-        echo "Changelog generation skipped. Use --model-provider to enable it."
+        printf 'Changelog generation skipped. Use --model-provider to enable it.\n'
     fi
 
     if [ "${save_history}" != "true" ]; then
@@ -1043,8 +1031,4 @@ main() {
 script_name="$(basename -- "$0")"
 if [ "${script_name}" = "changes.sh" ] || [ "${script_name}" = "changeish" ]; then
     main "$@"
-else
-    printf 'This script is intended to be run directly, not sourced.\n' >&2
-    printf 'Please run it as: %s [options]\n' "${script_name}"
-    printf 'For help, use: %s --help\n' "${script_name}"
 fi
