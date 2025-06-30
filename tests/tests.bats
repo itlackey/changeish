@@ -578,9 +578,9 @@ EOF
   mkdir -p docs
   echo "# Changelog" >docs/CHANGELOG.md
   echo "f" >f.txt && git add f.txt && git commit -m "f"
-  run "$CHANGEISH_SCRIPT" --model phi
+  run "$CHANGEISH_SCRIPT" --model phi --debug
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "phi"
+  echo "$output" | grep -q "Generating changelog using model: phi"
 }
 
 @test "Model: --api-model overrides --model for remote" {
@@ -589,7 +589,7 @@ EOF
   export CHANGEISH_API_KEY="tok"
   run "$CHANGEISH_SCRIPT" --to HEAD --model-provider remote --api-url http://fake --model foo --api-model bar
   [ "$status" -eq 0 ]
-  echo "$output" | grep -q "model: bar"
+  echo "$output" | grep -q "Hello I am bar!"
 }
 
 @test "Error: outside git repo" {
