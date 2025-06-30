@@ -94,41 +94,6 @@ section_name="auto"
 summary="false"
 message="false"
 
-# Define default prompt template (multi-line string) for AI generation
-default_prompt=$(
-    cat <<'END_PROMPT'
-[INSTRUCTIONS]
-Task: Generate a changelog from the Git history that follows the structure below. 
-Be sure to use only the information from the Git history in your response. 
-Output rules
-1. Use only information from the Git history provided in the prompt.
-2. Output **ONLY** valid Markdown based on the format provided in these instructions.
-    - Do not include the \`\`\` code block markers in your output.
-3. Use this exact hierarchy defined in the keepachangelog standard:
-   ### Added
-
-   - ...
-
-   ### Fixed
-
-   - ...
-
-   ### Changed
-
-   - ...
-
-   ### Removed
-
-   - ...
-
-   ### Security
-
-   - ...
-
-4. Omit any section that would be empty and do not include a ## header.
-END_PROMPT
-)
-
 example_changelog=$(
     cat <<'END_EXAMPLE'
 [Example Output (for reference only)]
@@ -159,7 +124,7 @@ default_version_files="changes.sh package.json pyproject.toml setup.py Cargo.tom
 
 # Update the script to latest release
 update() {
-    latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | jq -r '.tag_name')
+    latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | awk -F'"' '/"tag_name":/ {print $4; exit}')
     printf 'Updating changeish to version %s...\n' "${latest_version}"
     curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
     printf 'Update complete.\n'
@@ -185,7 +150,7 @@ show_help() {
 
 # Show all available release tags
 show_available_releases() {
-    curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[].tag_name'
+    curl -s https://api.github.com/repos/itlackey/changeish/releases | awk -F'"' '/"tag_name":/ {print $4}'
     exit 0
 }
 
@@ -370,7 +335,7 @@ run_git_diff() {
 
 # Generate the prompt file by combining the prompt template and git history
 # Globals:
-#   default_prompt (the built-in prompt template text)
+#   changelog_prompt_template (the built-in prompt template text)
 #   prompt_file (output path for prompt file)
 # Arguments:
 #   $1: Path to git history markdown file
@@ -383,7 +348,7 @@ generate_changelog_prompt() {
         printf 'Generating prompt file from template: %s\n' "${gp_template_file}"
         cp "${gp_template_file}" "${prompt_file}"
     else
-        printf '%s' "${default_prompt}" >"${prompt_file}"
+        printf '%s' "${changelog_prompt_template}" >"${prompt_file}"
     fi
 
     if [ -n "${gp_existing_section}" ]; then
@@ -880,7 +845,7 @@ main() {
     done
 
     if [ -n "${make_prompt_template_path-}" ]; then
-        printf '%s\n' "${default_prompt}" >"${make_prompt_template_path}"
+        printf '%s\n' "${changelog_prompt_template}" >"${make_prompt_template_path}"
         printf 'Default prompt template written to %s.\n' "${make_prompt_template_path}"
         exit 0
     fi
