@@ -97,18 +97,27 @@ Output rules
 1. Use only information from the Git history provided in the prompt.
 2. Output **ONLY** valid Markdown based on the format provided in these instructions.
     - Do not include the \`\`\` code block markers in your output.
-3. Use this exact hierarchy:
-   ### Enhancements
+3. Use this exact hierarchy defined in the keepachangelog standard:
+   ### Added
 
    - ...
 
-   ### Fixes
+   ### Fixed
 
    - ...
 
-   ### Chores
+   ### Changed
 
    - ...
+
+   ### Removed
+
+   - ...
+
+   ### Security
+
+   - ...
+
 4. Omit any section that would be empty and do not include a ## header.
 END_PROMPT
 )
@@ -116,16 +125,16 @@ example_changelog=$(
     cat <<'END_EXAMPLE'
 [Example Output (for reference only)]
 
-### Enhancements
+### Added
 
-- Example enhancement A
+- Example feature A
 
 [END]
 END_EXAMPLE
 )
 
 # Prompt for summarizing a single git diff
-summary_prompt=$(
+commit_message_prompt=$(
     cat <<'EOF'
 Task: Provide a concise, commit message for the changes described in the following git diff.
 Output only the summary text.
@@ -421,6 +430,23 @@ summarize_diff() {
 
     {
         printf '%s\n\n<<DIFF>>\n' "${summary_prompt}"
+        printf '%s\n' "${diff_text}"
+        printf '<<DIFF>>\n'
+    } >"${temp_prompt_file}"
+
+    generate_response "${temp_prompt_file}"
+
+    rm -f "${temp_prompt_file}"
+}
+
+# Summarize one diff via the configured LLM
+# $1 = raw diff text
+generate_commit_message_for_diff() {
+    diff_text="$1"
+    temp_prompt_file=$(mktemp)
+
+    {
+        printf '%s\n\n<<DIFF>>\n' "${commit_message_prompt}"
         printf '%s\n' "${diff_text}"
         printf '<<DIFF>>\n'
     } >"${temp_prompt_file}"
