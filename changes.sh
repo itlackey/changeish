@@ -86,6 +86,7 @@ model_provider="auto"
 update_mode="auto"
 section_name="auto"
 summary="false"
+message="false"
 
 # Define default prompt template (multi-line string) for AI generation
 default_prompt=$(
@@ -137,7 +138,7 @@ END_EXAMPLE
 commit_message_prompt=$(
     cat <<'EOF'
 Task: Provide a concise, commit message for the changes described in the following git diff.
-Output only the summary text.
+Output only the commit message.
 EOF
 )
 summary_prompt=$(
@@ -374,33 +375,45 @@ run_ollama() {
     fi
 }
 
-# Call remote API to generate changelog based on prompt
-# Arguments:
-#   $1: Remote model name
-#   $2: Prompt file path
+json_escape() {
+    # Reads stdin, outputs JSON-escaped string (with surrounding quotes)
+    # Handles: backslash, double quote, newlines, tabs, carriage returns, form feeds, backspaces
+    # Newlines are replaced with \n using tr
+    sed -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e 's/\r/\\r/g' \
+        -e 's/\t/\\t/g' \
+        -e 's/\f/\\f/g' \
+        -e 's/\b/\\b/g' \
+    | awk 'BEGIN{printf "\""} {printf "%s", $0} END{print "\""}'
+}
+
 generate_remote() {
     remote_model="$1"
     prompt_path="$2"
     # Read the prompt file as plain text
     content=$(cat "${prompt_path}")
-    # Build JSON with plain text content (escaped for JSON)
-    # json_payload=$(jq -n --arg model "${remote_model}" --arg content "${content}" \
-    #     '{model: $model, messages: [{role: "user", content: $content}], max_completion_tokens: 8192}')
 
-    body="{\"model\":\"${remote_model}\",\"messages\":[{\"role\":\"user\",\"content\":\"${content}\"}],\"max_completion_tokens\":8192}"
+    # Escape for JSON (replace backslash, double quote, and control characters)
+    # Use json_escape to safely encode the prompt as a JSON string
+    escaped_content=$(printf "%s" "${content}" | json_escape)
+    body=$(printf '{"model":"%s","messages":[{"role":"user","content":%s}],"max_completion_tokens":8192}' \
+        "${remote_model}" "${escaped_content}")
+
+    [ "${debug}" = "true" ] && printf 'Request body:\n%s\n' "${body}" >&2
 
     response=$(curl -s -X POST "${api_url}" \
         -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
         -d "${body}")
 
-    # if [ "${debug}" = "true" ]; then
-    #     echo "Response from remote API:" >&2
-    #     echo "${response}" >&2
-    # fi
+    if [ "${debug}" = "true" ]; then
+        echo "Response from remote API:" >&2
+        echo "${response}" >&2
+    fi
 
-    # Extract "content" value using awk to allow line breaks and special characters
-    result=$(echo "${response}" | awk 'BEGIN{RS="\"content\"";FS=":"} NR>1{match($0, /"([^"]|\\")*"/); val=substr($0, RSTART, RLENGTH); gsub(/^"/, "", val); gsub(/"$/, "", val); gsub(/\\"/, "\"", val); print val; exit}')
+    # Extract "content" value using grep/sed to allow line breaks and special characters
+    result=$(echo "${response}" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
     echo "${result}"
 }
 
@@ -409,7 +422,7 @@ generate_response() {
 
     if [ "${remote}" = "true" ]; then
         [ "${debug}" = "true" ] && printf 'Generating changelog using model: %s\n' "${api_model}" >&2
-        response=$(generate_remote "${api_model}" "${prompt_file}")
+        response=$(generate_remote "${api_model}" "${gr_prompt_file}")
     else
         if command -v ollama >/dev/null 2>&1; then
             [ "${debug}" = "true" ] && printf 'Generating changelog using model: %s\n' "${model}" >&2
@@ -780,6 +793,10 @@ main() {
             summary="true"
             shift
             ;;
+        --message)
+            message="true"
+            shift
+            ;;
         --debug)
             debug="true"
             shift
@@ -1034,6 +1051,11 @@ main() {
                 "$(run_git_diff "" "${include_pattern}" "${exclude_pattern}")")
             printf '%s\n' "${summary_response}"
         fi
+        if [ "${message}" = "true" ]; then
+            message_response=$(generate_commit_message_for_diff \
+                "$(run_git_diff "" "${include_pattern}" "${exclude_pattern}")")
+            printf '%s\n' "${message_response}"
+        fi
         [ "${debug}" = "true" ] && printf 'Generated git history for uncommitted changes in %s.\n' "${outfile}"
     elif [ "${staged_changes}" = "true" ]; then
         build_entry "Staged Changes" "${current_version}" "--cached"
@@ -1042,6 +1064,10 @@ main() {
             summary_response=$(summarize_diff \
                 "$(run_git_diff "--cached" "${include_pattern}" "${exclude_pattern}")")
             printf '%s\n' "${summary_response}"
+        fi
+        if [ "${message}" = "true" ]; then
+            message_response=$(generate_commit_message_for_diff "$(cat "${outfile}" || true)")
+            printf '%s\n' "${message_response}"
         fi
     else
         if [ -z "${to_rev}" ]; then to_rev="HEAD"; fi
