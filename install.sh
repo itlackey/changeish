@@ -2,7 +2,7 @@
 set -eu
 
 # Repository and filenames
-REPO="itlackey/changeish"
+REPO="lackeyi/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_DIR="prompts"
 INSTALL_DIR=""
@@ -86,7 +86,11 @@ compute_app_dir() {
       printf '%s/changeish' "${LOCALAPPDATA:-$HOME/AppData/Local}"
       ;;
     macos)
-      printf '%s/Library/Application Scripts/com.github.itlackey.changeish' "$HOME"
+      printf '%s/Library/Application Scripts/com.github.%s' "$HOME" "${REPO}"
+      ;;
+    *)
+      printf 'Error: Unsupported platform: %s\n' "${PLATFORM}" >&2
+      exit 1
       ;;
   esac
 }
