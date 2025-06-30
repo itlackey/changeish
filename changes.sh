@@ -64,6 +64,12 @@ set -e
 IFS=' 
 '
 
+SCRIPT_PATH="$(readlink -f "$0")"
+SCRIPT_DIR="$(dirname "${SCRIPT_PATH}")"
+PROMPT_DIR="${SCRIPT_DIR}/prompts"
+
+changelog_prompt_template=$(cat "${PROMPT_DIR}/changelog_prompt.md")
+
 # Initialize default option values
 debug="false"
 from_rev=""
@@ -122,6 +128,7 @@ Output rules
 4. Omit any section that would be empty and do not include a ## header.
 END_PROMPT
 )
+
 example_changelog=$(
     cat <<'END_EXAMPLE'
 [Example Output (for reference only)]
@@ -1057,6 +1064,7 @@ main() {
     if [ "${debug}" = "true" ]; then
         printf "## Settings\n"
         printf "Debug mode enabled.\n"
+        printf "Prompt directory: %s\n" "${PROMPT_DIR}"
         printf "Using model: %s\n" "${model}"
         printf "Remote mode: %s\n" "${remote}"
         printf "API URL: %s\n" "${api_url}"
