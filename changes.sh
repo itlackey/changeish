@@ -6,6 +6,7 @@
 # Options:
 #   --help                  Show this help message and exit
 #   --summary               Output a summary of the changes to the console.
+#   --message               Output a commit message for the changes to the console.
 #   --current               Use uncommitted (working tree) changes for git history (default)
 #   --staged                Use staged (index) changes for git history
 #   --all                   Include all history (from first commit to HEAD)
@@ -15,7 +16,7 @@
 #   --exclude-pattern P     Exclude files matching pattern P from full diff
 #   --todo-pattern P        Pattern for files to check for TODO changes (default: *todo*)
 #   --model MODEL           Specify the local Ollama model to use (default: qwen2.5-coder)
-#   --model-provider MODE  Control how changelog is generated: auto (default), local, remote, none
+#   --model-provider MODE   Control how changelog is generated: auto (default), local, remote, none
 #   --api-model MODEL       Specify remote API model (overrides --model for remote usage)
 #   --api-url URL           Specify remote API endpoint URL for changelog generation
 #   --changelog-file PATH   Path to changelog file to update (default: ./CHANGELOG.md)
@@ -49,6 +50,12 @@
 #   changeish --config-file ./myconfig.env
 #   # Write the default prompt template to a file:
 #   changeish --make-prompt-template my_prompt_template.md
+#   # Output a summary of the current changes (working tree):
+#   changeish --summary
+#   # Output a commit message for staged changes:
+#   changeish --staged --message
+#   # Output both a summary and commit message for current changes:
+#   changeish --summary --message
 #
 # Environment variables:
 #   CHANGEISH_MODEL       Default model to use for local generation (overridden by --model)
