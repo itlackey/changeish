@@ -6,13 +6,17 @@
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ADDED: --summary option to provide summary of changes
 - ENHANCEMENT: --type "annoucement" option to generate a release announcement
-- ENHANCEMENT: --type "commit" option to generate commit message `git commit -m "$(changeish -t commit)"
+- ADDED: --type "commit" option to generate commit message `git commit -m "$(changeish -t commit)"
 - ENHANCEMENT: add git config user.name to output
 
 - CHORE: Add more "real-world" tests with more detailed output validation
 - ENHANCEMENT: allow user to specify (regex?) patterns for matching sections, headers, versions, todos
 - ENHANCEMENT: improve prompt with more specific todo rules. ie. BUG->FIXED changes go in ### Fixed sub section
 
+## In Progress
+
+- Improve installer to support copying default templates to APP_DIR
+- Pending updating script to look for templates in APP_DIR if not specified and APP_DIR exists. Otherwise throw an error saying template is required
 
 ## Completed
 

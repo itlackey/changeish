@@ -79,7 +79,7 @@ version_file=""
 all_history="false"
 current_changes="false"
 staged_changes="false"
-outfile="history.md"
+history_file="history.md"
 remote="false"
 default_todo_grep_pattern="TODO|FIX|ENHANCEMENT|DONE|CHORE|ADD|BUG"
 model_provider="auto"
@@ -182,10 +182,46 @@ show_available_releases() {
     exit 0
 }
 
+# 5. OS and WSL detection
+get_app_dir() {
+    OS_NAME=$(uname -s)
+    case "${OS_NAME}" in
+    Linux*)
+        if [ -f /etc/wsl.conf ] || grep -qi microsoft /proc/version 2>/dev/null; then
+            PLATFORM=windows
+        else
+            PLATFORM=linux
+        fi
+        ;;
+    Darwin*) PLATFORM=macos ;;
+    CYGWIN* | MINGW* | MSYS*) PLATFORM=windows ;;
+    *)
+        printf 'Error: Unsupported OS: %s\n' "${OS_NAME}" >&2
+        exit 1
+        ;;
+    esac
+
+    case "${PLATFORM}" in
+    linux)
+        printf '%s/changeish' "${XDG_DATA_HOME:-"${HOME}/.local/share"}"
+        ;;
+    windows)
+        printf '%s/changeish' "${LOCALAPPDATA:-"${HOME:-USERPROFILE}/AppData/Local"}"
+        ;;
+    macos)
+        printf '%s/Library/Application Scripts/com.example.changeish' "${HOME}"
+        ;;
+    *)
+        printf 'Error: Unsupported platform: %s\n' "${PLATFORM}" >&2
+        exit 1
+        ;;
+    esac
+}
+
 # -------------------------------------------------------------------
 # New helper: build a single history “entry” (commit, staged or current)
 # Globals:
-#   outfile            - path to Markdown history file
+#   history_file            - path to Markdown history file
 #   found_version_file - path to version file, if any
 #   include_pattern    - pattern for “include” diffs
 #   exclude_pattern    - pattern for excluding files from full diff
@@ -203,7 +239,7 @@ build_entry() {
     [ "${debug:-false}" = "true" ] && printf 'Building entry for: %s\n' "${label}" >&2
     [ "${debug:-false}" = "true" ] && printf 'Diff spec: %s\n' "${diff_spec}" >&2
     [ "${debug:-false}" = "true" ] && printf 'be_version: %s\n' "${be_version}" >&2
-    printf '## %s\n' "${label}" >>"${outfile}"
+    printf '## %s\n' "${label}" >>"${history_file}"
     # version‐file diff
     if [ -n "${found_version_file}" ] && [ -f "${found_version_file}" ]; then
         tmpver=$(mktemp)
@@ -221,14 +257,14 @@ build_entry() {
         fi
         if [ -n "${version_diff}" ]; then
             parsed_version=$(parse_version "${version_diff}")
-            printf '\n**Version:** %s (updated)\n' "${parsed_version}" >>"${outfile}"
+            printf '\n**Version:** %s (updated)\n' "${parsed_version}" >>"${history_file}"
         else
             # Fallback: parse current version from file if available
             current_file_version=$(get_current_version_from_file "${found_version_file}")
             if [ -n "${current_file_version}" ]; then
-                printf '\n**Version:** %s (current)\n' "${current_file_version}" >>"${outfile}"
+                printf '\n**Version:** %s (current)\n' "${current_file_version}" >>"${history_file}"
             else
-                printf '\n**Version:** %s (arg)\n' "${be_version}" >>"${outfile}"
+                printf '\n**Version:** %s (arg)\n' "${be_version}" >>"${history_file}"
             fi
         fi
         rm -f "${tmpver}"
@@ -242,7 +278,7 @@ build_entry() {
             printf '**Message:**\n'
             git show -s --format=%B "${commit_hash}"
             printf '\n'
-        } >>"${outfile}"
+        } >>"${history_file}"
     fi
     [ "${debug:-false}" = "true" ] && git --no-pager diff --unified=0 -- "*todo*" >&2
     if [ -n "${todo_pattern}" ]; then
@@ -257,7 +293,7 @@ build_entry() {
                 printf '```diff\n'
                 printf '%s\n' "${todo_diff}"
                 printf '```\n'
-            } >>"${outfile}"
+            } >>"${history_file}"
         fi
     fi
     # Validate include/exclude patterns
@@ -282,10 +318,10 @@ build_entry() {
         printf '```diff\n'
         run_git_diff "${diff_spec}" "${include_arg}" "${exclude_arg}"
         printf '```\n\n'
-    } >>"${outfile}"
+    } >>"${history_file}"
     if [ "${debug:-false}" = "true" ]; then
         printf 'History output:\n' >&2
-        cat "${outfile}" >&2
+        cat "${history_file}" >&2
     fi
 }
 
@@ -384,8 +420,8 @@ json_escape() {
         -e 's/\r/\\r/g' \
         -e 's/\t/\\t/g' \
         -e 's/\f/\\f/g' \
-        -e 's/\b/\\b/g' \
-    | awk 'BEGIN{printf "\""} {printf "%s", $0} END{print "\""}'
+        -e 's/\b/\\b/g' |
+        awk 'BEGIN{printf "\""} {printf "%s", $0} END{print "\""}'
 }
 
 generate_remote() {
@@ -851,9 +887,9 @@ main() {
     fi
 
     if [ "${save_history}" = "true" ]; then
-        outfile="history.md"
+        history_file="history.md"
     else
-        outfile=$(mktemp)
+        history_file=$(mktemp)
     fi
     if [ "${save_prompt}" = "true" ]; then
         prompt_file="prompt.md"
@@ -1047,26 +1083,23 @@ main() {
     if [ "${current_changes}" = "true" ]; then
         build_entry "Working Tree" "${current_version}" ""
         if [ "${summary}" = "true" ]; then
-            summary_response=$(summarize_diff \
-                "$(run_git_diff "" "${include_pattern}" "${exclude_pattern}")")
+            summary_response=$(summarize_diff "$(cat "${history_file}" || true)")
             printf '%s\n' "${summary_response}"
         fi
         if [ "${message}" = "true" ]; then
-            message_response=$(generate_commit_message_for_diff \
-                "$(run_git_diff "" "${include_pattern}" "${exclude_pattern}")")
+            message_response=$(generate_commit_message_for_diff "$(cat "${history_file}" || true)")
             printf '%s\n' "${message_response}"
         fi
-        [ "${debug}" = "true" ] && printf 'Generated git history for uncommitted changes in %s.\n' "${outfile}"
+        [ "${debug}" = "true" ] && printf 'Generated git history for uncommitted changes in %s.\n' "${history_file}"
     elif [ "${staged_changes}" = "true" ]; then
         build_entry "Staged Changes" "${current_version}" "--cached"
-        [ "${debug}" = "true" ] && printf 'Generated git history for staged changes in %s.\n' "${outfile}"
+        [ "${debug}" = "true" ] && printf 'Generated git history for staged changes in %s.\n' "${history_file}"
         if [ "${summary}" = "true" ]; then
-            summary_response=$(summarize_diff \
-                "$(run_git_diff "--cached" "${include_pattern}" "${exclude_pattern}")")
+            summary_response=$(summarize_diff "$(cat "${history_file}" || true)")
             printf '%s\n' "${summary_response}"
         fi
         if [ "${message}" = "true" ]; then
-            message_response=$(generate_commit_message_for_diff "$(cat "${outfile}" || true)")
+            message_response=$(generate_commit_message_for_diff "$(cat "${history_file}" || true)")
             printf '%s\n' "${message_response}"
         fi
     else
@@ -1125,10 +1158,10 @@ main() {
         printf '%s\n' "${final_summary}"
 
         IFS="${OLDIFS}"
-        [ "${debug}" = "true" ] && printf 'Generated git history in %s.\n' "${outfile}"
+        [ "${debug}" = "true" ] && printf 'Generated git history in %s.\n' "${history_file}"
     fi
 
-    generate_changelog_prompt "${outfile}" "${prompt_template}" "${existing_changelog_section}"
+    generate_changelog_prompt "${history_file}" "${prompt_template}" "${existing_changelog_section}"
 
     if [ "${should_generate_changelog}" = "true" ]; then
         if [ ! -f "${changelog_file}" ]; then
@@ -1141,7 +1174,7 @@ main() {
     fi
 
     if [ "${save_history}" != "true" ]; then
-        rm -f "${outfile}"
+        rm -f "${history_file}"
     fi
     if [ "${save_prompt}" != "true" ]; then
         rm -f "${prompt_file}"
