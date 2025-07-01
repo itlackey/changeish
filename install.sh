@@ -2,7 +2,7 @@
 set -eu
 
 # Repository and filenames
-REPO="lackeyi/changeish"
+REPO="itlackey/changeish"
 SCRIPT_NAME="changes.sh"
 PROMPT_DIR="prompts"
 INSTALL_DIR=""
