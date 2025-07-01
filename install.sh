@@ -97,34 +97,35 @@ compute_app_dir() {
 APP_DIR="$(compute_app_dir)"
 
 # 7. Display planned installation
+printf 'Installing version %s\n' "$VERSION"
 printf 'Prompts → %s/%s\n' "$APP_DIR" "$PROMPT_DIR"
 printf 'Changes.sh → %s/%s and symlink/copy at %s/changeish\n' "$APP_DIR" "$SCRIPT_NAME" "$INSTALL_DIR"
-printf 'Installing version %s\n' "{$VERSION}"
 
 # 8. Create necessary directories
 mkdir -p "$INSTALL_DIR" "$APP_DIR/$PROMPT_DIR"
 
 # 9. Check Git version for sparse-checkout
-#if [ ! $(command -v git >/dev/null 2>&1) ]; then
-#  printf 'Error: git is required to use changeish.\n' >&2
-#  exit 1
-#fi
+if ! command -v git >/dev/null 2>&1; then
+  printf 'Error: git is required to use changeish.\n' >&2
+  exit 1
+fi
 
 # 10. Fetch prompts
 TMP="$(mktemp -d)"
-git clone --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
+git  -c advice.detachedHead=false clone -q --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
 cp -R "$TMP/$PROMPT_DIR"/* "$APP_DIR/$PROMPT_DIR/"
-rm -rf "$TMP"
+cp "$TMP/$SCRIPT_NAME" "$APP_DIR/"
+chmod +x "$APP_DIR/$SCRIPT_NAME"
 
 # 11. Install changes.sh and create symlink or fallback copy
-curl -fsSL -o "$APP_DIR/$SCRIPT_NAME" \
-  "https://raw.githubusercontent.com/$REPO/$VERSION/$SCRIPT_NAME"
-chmod +x "$APP_DIR/$SCRIPT_NAME"
 if [ "$PLATFORM" = "windows" ]; then
-  cp -f "$APP_DIR/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
+  cp -f "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
 else
-  ln -sf "$APP_DIR/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
+  ln -sf "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
+  cp -f "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
 fi
+
+rm -rf "$TMP"
 
 # 12. Final PATH check
 case ":$PATH:" in
