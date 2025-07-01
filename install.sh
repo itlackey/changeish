@@ -99,36 +99,20 @@ APP_DIR="$(compute_app_dir)"
 # 7. Display planned installation
 printf 'Prompts → %s/%s\n' "$APP_DIR" "$PROMPT_DIR"
 printf 'Changes.sh → %s/%s and symlink/copy at %s/changeish\n' "$APP_DIR" "$SCRIPT_NAME" "$INSTALL_DIR"
+printf 'Installing version %s\n' "{$VERSION}"
 
 # 8. Create necessary directories
 mkdir -p "$INSTALL_DIR" "$APP_DIR/$PROMPT_DIR"
 
 # 9. Check Git version for sparse-checkout
-if command -v git >/dev/null 2>&1; then
-  GVER="$(git --version | awk '{print $3}')"
-  major="$(printf '%s' "$GVER" | awk -F. '{print $1}')"
-  minor="$(printf '%s' "$GVER" | awk -F. '{print $2}')"
-  if [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 25 ]; }; then
-    MODE="sparse"
-  else
-    printf 'Warning: Git %s lacks sparse-checkout; using full clone.\n' "$GVER"
-    MODE="full"
-  fi
-else
-  printf 'Error: git is required to fetch prompt templates.\n' >&2
-  exit 1
-fi
+#if [ ! $(command -v git >/dev/null 2>&1) ]; then
+#  printf 'Error: git is required to use changeish.\n' >&2
+#  exit 1
+#fi
 
 # 10. Fetch prompts
 TMP="$(mktemp -d)"
-if [ "$MODE" = "sparse" ]; then
-  git clone --depth 1 --branch "$VERSION" --filter=blob:none --sparse \
-    "https://github.com/$REPO.git" "$TMP"
-  cd "$TMP" && git sparse-checkout init --cone && \
-    git sparse-checkout set "$PROMPT_DIR"
-else
-  git clone --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
-fi
+git clone --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
 cp -R "$TMP/$PROMPT_DIR"/* "$APP_DIR/$PROMPT_DIR/"
 rm -rf "$TMP"
 
