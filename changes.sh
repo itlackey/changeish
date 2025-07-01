@@ -75,8 +75,6 @@ SCRIPT_PATH="$(readlink -f "$0")"
 SCRIPT_DIR="$(dirname "${SCRIPT_PATH}")"
 PROMPT_DIR="${SCRIPT_DIR}/prompts"
 
-changelog_prompt_template=$(cat "${PROMPT_DIR}/changelog_prompt.md")
-
 # Initialize default option values
 debug="false"
 from_rev=""
@@ -157,7 +155,7 @@ show_help() {
 
 # Show all available release tags
 show_available_releases() {
-    curl -s https://api.github.com/repos/itlackey/changeish/releases | awk -F'"' '/"tag_name":/ {print $4}'
+    curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[] | .tag_name'
     exit 0
 }
 
@@ -732,6 +730,8 @@ main() {
     config_file=""
     model="qwen2.5-coder"
     model_set="false"
+
+    changelog_prompt_template=$(cat "${PROMPT_DIR}/changelog_prompt.md")
 
     while [ $# -gt 0 ]; do
         case "$1" in

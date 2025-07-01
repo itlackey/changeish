@@ -163,9 +163,15 @@ EOF
   chmod +x stubs/curl
   export PATH="$PWD/stubs:$PATH"
   run "$CHANGEISH_SCRIPT" --available-releases
-  [ "$status" -eq 0 ]
-  echo "$output" | grep -q "v1.0.0"
-  echo "$output" | grep -q "v2.0.0"
+
+  # Ensure the output is captured correctly and check for expected tags
+  echo "$output" >>$ERROR_LOG
+
+  # Check if the status code is zero (indicating success)
+  assert_success
+  # Verify that both v1.0.0 and v2.0.0 are present in the output
+  echo "$output" | grep -qi "v1.0.0"
+  echo "$output" | grep -qi "v2.0.0"
 }
 
 @test "Meta: --update calls installer" {
