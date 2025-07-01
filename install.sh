@@ -19,18 +19,18 @@ fi
 # 2. Parse args
 while [ $# -gt 0 ]; do
   case "$1" in
-    --version)
-      VERSION="$2"
-      shift 2
-      ;;
-    --install-dir)
-      INSTALL_DIR_OVERRIDE="$2"
-      shift 2
-      ;;
-    *)
-      printf 'Unknown argument: %s\n' "$1" >&2
-      exit 1
-      ;;
+  --version)
+    VERSION="$2"
+    shift 2
+    ;;
+  --install-dir)
+    INSTALL_DIR_OVERRIDE="$2"
+    shift 2
+    ;;
+  *)
+    printf 'Unknown argument: %s\n' "$1" >&2
+    exit 1
+    ;;
   esac
   # no extra shift
   break
@@ -58,16 +58,16 @@ fi
 detect_platform() {
   OS="$(uname -s)"
   case "$OS" in
-    Linux*)
-      if [ -f /etc/wsl.conf ] || grep -qi microsoft /proc/version 2>/dev/null; then
-        printf 'windows'
-      else
-        printf 'linux'
-      fi
-      ;;
-    Darwin*) printf 'macos' ;;
-    CYGWIN*|MINGW*|MSYS*) printf 'windows' ;;
-    *) printf 'unsupported' ;;
+  Linux*)
+    if [ -f /etc/wsl.conf ] || grep -qi microsoft /proc/version 2>/dev/null; then
+      printf 'windows'
+    else
+      printf 'linux'
+    fi
+    ;;
+  Darwin*) printf 'macos' ;;
+  CYGWIN* | MINGW* | MSYS*) printf 'windows' ;;
+  *) printf 'unsupported' ;;
   esac
 }
 PLATFORM="$(detect_platform)"
@@ -79,27 +79,22 @@ fi
 # 6. Compute APP_DIR based on PLATFORM
 compute_app_dir() {
   case "$PLATFORM" in
-    linux)
-      printf '%s/changeish' "${XDG_DATA_HOME:-$HOME/.local/share}"
-      ;;
-    windows)
-      printf '%s/changeish' "${LOCALAPPDATA:-$HOME/AppData/Local}"
-      ;;
-    macos)
-      printf '%s/Library/Application Scripts/com.github.%s' "$HOME" "${REPO}"
-      ;;
-    *)
-      printf 'Error: Unsupported platform: %s\n' "${PLATFORM}" >&2
-      exit 1
-      ;;
+  linux)
+    printf '%s/changeish' "${XDG_DATA_HOME:-$HOME/.local/share}"
+    ;;
+  windows)
+    printf '%s/changeish' "${LOCALAPPDATA:-$HOME/AppData/Local}"
+    ;;
+  macos)
+    printf '%s/Library/Application Scripts/com.github.%s' "$HOME" "${REPO}"
+    ;;
+  *)
+    printf 'Error: Unsupported platform: %s\n' "${PLATFORM}" >&2
+    exit 1
+    ;;
   esac
 }
 APP_DIR="$(compute_app_dir)"
-
-# 7. Display planned installation
-printf 'Installing version %s\n' "$VERSION"
-printf 'Prompts → %s/%s\n' "$APP_DIR" "$PROMPT_DIR"
-printf 'Changes.sh → %s/%s and symlink/copy at %s/changeish\n' "$APP_DIR" "$SCRIPT_NAME" "$INSTALL_DIR"
 
 # 8. Create necessary directories
 mkdir -p "$INSTALL_DIR" "$APP_DIR/$PROMPT_DIR"
@@ -110,26 +105,29 @@ if ! command -v git >/dev/null 2>&1; then
   exit 1
 fi
 
-# 10. Fetch prompts
+
+# 10. Fetch repo
 TMP="$(mktemp -d)"
-git  -c advice.detachedHead=false clone -q --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
-cp -R "$TMP/$PROMPT_DIR"/* "$APP_DIR/$PROMPT_DIR/"
+printf 'Installing version %s\n' "$VERSION"
+git -c advice.detachedHead=false clone -q --depth 1 --branch "$VERSION" "https://github.com/$REPO.git" "$TMP"
+cp -Ri "$TMP/$PROMPT_DIR"/* "$APP_DIR/$PROMPT_DIR/"
 cp "$TMP/$SCRIPT_NAME" "$APP_DIR/"
 chmod +x "$APP_DIR/$SCRIPT_NAME"
+printf 'Prompts → %s/%s\n' "$APP_DIR" "$PROMPT_DIR"
 
 # 11. Install changes.sh and create symlink or fallback copy
 if [ "$PLATFORM" = "windows" ]; then
   cp -f "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
 else
-  ln -sf "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
-  cp -f "$TMP/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
+  ln -sf "$APP_DIR/$SCRIPT_NAME" "$INSTALL_DIR/changeish"
 fi
+printf 'Changes.sh → %s/%s and symlink/copy at %s/changeish\n' "$APP_DIR" "$SCRIPT_NAME" "$INSTALL_DIR"
 
 rm -rf "$TMP"
 
 # 12. Final PATH check
 case ":$PATH:" in
-  *":$INSTALL_DIR:"*) ;; 
-  *) printf 'Warning: %s is not in your PATH.\n' "$INSTALL_DIR" ;;
+*":$INSTALL_DIR:"*) ;;
+*) printf 'Warning: %s is not in your PATH.\n' "$INSTALL_DIR" ;;
 esac
 printf 'Installation complete!\n'
