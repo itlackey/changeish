@@ -159,42 +159,6 @@ show_available_releases() {
     exit 0
 }
 
-# 5. OS and WSL detection
-get_app_dir() {
-    OS_NAME=$(uname -s)
-    case "${OS_NAME}" in
-    Linux*)
-        if [ -f /etc/wsl.conf ] || grep -qi microsoft /proc/version 2>/dev/null; then
-            PLATFORM=windows
-        else
-            PLATFORM=linux
-        fi
-        ;;
-    Darwin*) PLATFORM=macos ;;
-    CYGWIN* | MINGW* | MSYS*) PLATFORM=windows ;;
-    *)
-        printf 'Error: Unsupported OS: %s\n' "${OS_NAME}" >&2
-        exit 1
-        ;;
-    esac
-
-    case "${PLATFORM}" in
-    linux)
-        printf '%s/changeish' "${XDG_DATA_HOME:-"${HOME}/.local/share"}"
-        ;;
-    windows)
-        printf '%s/changeish' "${LOCALAPPDATA:-"${HOME:-USERPROFILE}/AppData/Local"}"
-        ;;
-    macos)
-        printf '%s/Library/Application Scripts/com.example.changeish' "${HOME}"
-        ;;
-    *)
-        printf 'Error: Unsupported platform: %s\n' "${PLATFORM}" >&2
-        exit 1
-        ;;
-    esac
-}
-
 # -------------------------------------------------------------------
 # New helper: build a single history “entry” (commit, staged or current)
 # Globals:
