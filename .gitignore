@@ -2,3 +2,6 @@
 git_history.md
 prompt.md
 .env
+history.md
+.test-logs
+tests/.logs

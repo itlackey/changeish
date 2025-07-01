@@ -1,0 +1,16 @@
+# Run with POSIX sh dialect
+shell=sh
+
+# Only report errors (ignore warnings/style)
+severity=warnings
+
+# # Disable notices about things that are intentionally non-POSIX or acceptable
+# disable = \
+#   SC2039,  # In POSIX sh, some features are undefined
+#   SC3014,  # Using '==' instead of '='
+#   SC3013,  # Using -nt (not POSIX)
+#   SC2148,  # No shebang or incorrect shell directive
+#   SC3000  # General compatibility warnings
+
+# # Optionally ignore POSIX-specific cleanliness rules (arrow compatibility)
+# exclude = SC2086  # word splitting warnings (if you're handling quoting carefully)
