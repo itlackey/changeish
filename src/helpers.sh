@@ -52,7 +52,6 @@ json_escape() {
 }
 
 generate_remote() {
-
     content=$(cat "$1")
 
     # Escape for JSON (replace backslash, double quote, and control characters)
@@ -61,29 +60,21 @@ generate_remote() {
     body=$(printf '{"model":"%s","messages":[{"role":"user","content":%s}],"max_completion_tokens":8192}' \
         "${api_model}" "${escaped_content}")
 
-    [ "${debug}" = "true" ] && printf 'Request body:\n%s\n' "${body}" >&2
+    #[ "${debug}" = "true" ] && printf 'Request body:\n%s\n' "${body}" >&2
 
     response=$(curl -s -X POST "${api_url}" \
         -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
         -d "${body}")
 
-    if [ "${debug}" = "true" ]; then
-        echo "Response from remote API:" >&2
-        echo "${response}" >&2
-    fi
+    # if [ "${debug}" = "true" ]; then
+    #     echo "Response from remote API:" >&2
+    #     echo "${response}" >&2
+    # fi
 
     # Extract "content" value using grep/sed to allow line breaks and special characters
     result=$(echo "${response}" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
     echo "${result}"
-
-
-
-    # body=$(printf '{"model":"%s","messages":[{"role":"user","content":"%s"}]}' \
-    #     "${api_model}" "$(cat "$1" | json_escape)")
-    # curl -s -X POST "${api_url}" -H 'Content-Type: application/json' -d "${body}" |
-    #     sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
-    #     sed 's/\\n/\n/g; s/\\"/"/g'
 }
 
 run_local() {
@@ -95,7 +86,8 @@ run_local() {
 }
 
 generate_response() {
-    case $model_provider in
+    [ "$debug" = true ] && printf 'Debug: Generating response using %s model...\n' "$model_provider"
+    case ${model_provider} in
     remote) generate_remote "$1" ;;
     none) cat "$1" ;;
     *) run_local "$1" ;;
@@ -104,23 +96,27 @@ generate_response() {
 
 # Extract TODO changes for history extraction
 extract_todo_changes() {
-    range=$1
-    if [ "$range" = "--cached" ]; then
-        td=$(git --no-pager diff --cached --unified=0 -b -w --no-prefix --color=never -- $todo_pattern || true)
-    elif [ "$range" = "--current" ] || [ -z "$range" ]; then
-        td=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- $todo_pattern || true)
+    range="$1"
+    pattern="${2:-$todo_pattern}"
+
+    [ "$debug" = true ] && printf 'Debug: Extracting TODO changes for range: %s with pattern: %s\n' "${range}" "${pattern}" >&2
+    if [ "${range}" = "--cached" ]; then
+        td=$(git --no-pager diff --cached --unified=0 -b -w --no-prefix --color=never -- "${pattern}" || true)
+    elif [ "${range}" = "--current" ] || [ -z "${range}" ]; then
+        td=$(git --no-pager diff --unified=0 -b -w --no-prefix --color=never -- "${pattern}" || true)
     else
-        td=$(git --no-pager diff $range --unified=0 -b -w --no-prefix --color=never -- $todo_pattern || true)
+        td=$(git --no-pager diff "${range}" --unified=0 -b -w --no-prefix --color=never -- "${pattern}" || true)
     fi
-    printf '%s' "$td"
+    printf '%s' "${td}"
 }
 
 # Build git history markdown (with version info)
 build_history() {
     hist=$1
     commit=$2
+    todo_pattern="${3:-${CHANGEISH_TODO_PATTERN}:-"TODO"}"
 
-    [ "$debug" = true ] && printf 'Debug: Building history for commit %s\n' "$commit"
+    [ "$debug" = true ] &&  printf 'Debug: Building history for commit %s\n' "$commit"
 
     : >"$hist"
     # Version detection logic
@@ -135,6 +131,8 @@ build_history() {
             }
         done
     fi
+    [ "$debug" = true ] && printf 'Debug: Found version file: %s\n' "$found_version_file"
+
     version_info=""
     version_diff=""
     if [ -n "$found_version_file" ]; then
@@ -157,7 +155,7 @@ build_history() {
         fi
     fi
 
-    [ "$debug" = true ] && printf 'Debug: Found version info: %s\n' "$version_diff"
+    [ "$debug" = true ] &&  printf 'Debug: Found version info: %s\n' "$version_diff"
 
     if [ -n "$version_info" ]; then
         printf '%s\n' "$version_info" >>"$hist"
@@ -182,10 +180,13 @@ build_history() {
     eval git "$git_args" >>"$hist"
     printf '\n```' >>"$hist"
     # Append TODO section
-    td=$(extract_todo_changes "$commit")
+    td=$(extract_todo_changes "$commit" "$todo_pattern")
+    [ "$debug" = true ] &&  printf 'Debug: TODO changes extracted: %s\n' "$td"
     [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
-
-    [ "$debug" = true ] && printf 'Debug: History built successfully, output file: %s\n' "$hist"
+    
+    # Return 0 in case todo changes are empty
+    return 0
+    
 }
 
 # Remove duplicate blank lines and ensure file ends with newline

@@ -11,34 +11,30 @@ early_config_file=""
 prev_arg=""
 for arg in "$@"; do
     case "$arg" in
-        --config-file)
-            prev_arg="config_file"
-            ;;
-        --config-file=*)
-            early_config_file=$(printf '%s' "$arg" | sed 's/^--config-file=//')
+    --config-file)
+        prev_arg="config_file"
+        ;;
+    --config-file=*)
+        early_config_file=$(printf '%s' "$arg" | sed 's/^--config-file=//')
+        break
+        ;;
+    *)
+        if [ "$prev_arg" = "config_file" ]; then
+            early_config_file="$arg"
             break
-            ;;
-        *)
-            if [ "$prev_arg" = "config_file" ]; then
-                early_config_file="$arg"
-                break
-            fi
-            ;;
+        fi
+        ;;
     esac
 done
 config_file=${early_config_file:-$config_file}
 
-printf 'Debug: Using config file: %s\n' "${config_file}" 
 # Always attempt to source config file if it exists; empty config_file is a valid state.
 if [ -f "${config_file}" ]; then
-     printf 'Debug: Loading config file: %s\n' "${config_file}"
     # shellcheck disable=SC1090
     . "${config_file}"
 elif [ -n "${config_file}" ]; then
     printf 'Error: config file "%s" not found.\n' "${config_file}" >&2
     exit 1
-else
-     printf 'Debug: No config file specified\n'
 fi
 
 # -------------------------------------------------------------------
@@ -48,6 +44,9 @@ SCRIPT_PATH=$(readlink -f "$0")
 SCRIPT_DIR=$(dirname "${SCRIPT_PATH}")
 PROMPT_DIR=${SCRIPT_DIR}/prompts
 . "${SCRIPT_DIR}/helpers.sh"
+
+TARGET=""
+PATTERN=""
 
 debug=false
 dry_run=false
@@ -67,7 +66,6 @@ model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
 api_model=${CHANGEISH_API_MODEL:-}
 api_url=${CHANGEISH_API_URL:-}
 api_key=${CHANGEISH_API_KEY:-}
-remote=false
 
 # Changelog & release defaults
 changelog_file='CHANGELOG.md'
@@ -137,38 +135,50 @@ is_valid_pattern() {
 
 # Parse global flags and detect subcommand/target/pattern
 parse_args() {
-    TARGET=""
-    PATTERN=""
     subcmd=""
     debug=false
     dry_run=false
     # 1. Subcommand or help/version must be first
-    if [ $# -eq 0 ]; then show_help; exit 0; fi
+    if [ $# -eq 0 ]; then
+        show_help
+        exit 0
+    fi
     case "$1" in
-        -h|--help|help)
-            show_help; exit 0;;
-        -v|--version)
-            show_version; exit 0;;
-        message|summary|changelog|release-notes|announce|available-releases|update)
-            subcmd=$1; shift;;
-        *)
-            echo "First argument must be a subcommand or -h/--help/-v/--version" >&2
-            show_help; exit 1;;
+    -h | --help | help)
+        show_help
+        exit 0
+        ;;
+    -v | --version)
+        show_version
+        exit 0
+        ;;
+    message | summary | changelog | release-notes | announce | available-releases | update)
+        subcmd=$1
+        shift
+        ;;
+    *)
+        echo "First argument must be a subcommand or -h/--help/-v/--version" >&2
+        show_help
+        exit 1
+        ;;
     esac
     # 2. Next arg: target (if present and not option)
     if [ $# -gt 0 ]; then
         case "$1" in
-            --current|--staged)
-                TARGET=$1; shift;;
-            -* )
-                : # skip, no target
-                ;;
-            * )
-                if is_valid_git_range "$1"; then
-                    TARGET=$1; shift;
-                fi
-                # else: do not shift, let it fall through to pattern parsing
-                ;;
+        --current | --staged)
+            TARGET=$1
+            shift
+            ;;
+        -*)
+            : # skip, no target
+            ;;
+        *)
+            if is_valid_git_range "$1"; then
+                TARGET=$1
+                shift
+            fi
+            # else: do not shift, let it fall through to pattern parsing
+            ;;
         esac
     fi
     # 3. Collect all non-option args as pattern (until first option or end)
@@ -184,25 +194,75 @@ parse_args() {
     # 4. Remaining args: global options
     while [ $# -gt 0 ]; do
         case "$1" in
-            --verbose) debug=true; shift;;
-            --dry-run) dry_run=true; shift;;
-            --template-dir) template_dir=$2; shift 2;;
-            --config-file) config_file=$2; shift 2;;
-            --output-file) output_file=$2; shift 2;;
-            --todo-pattern) todo_pattern=$2; shift 2;;
-            --version-file) version_file=$2; shift 2;;
-            --model) model=$2; shift 2;;
-            --model-provider) model_provider=$2; shift 2;;
-            --api-model) api_model=$2; shift 2;;
-            --api-url) api_url=$2; shift 2;;
-            --update-mode) update_mode=$2; shift 2;;
-            --section-name) section_name=$2; shift 2;;
-            --) shift; break;;
-            --*) echo "Unknown option or argument: $1" >&2; show_help; exit 1;;
-            *) echo "Unknown argument: $1" >&2; show_help; exit 1;;
+        --verbose)
+            debug=true
+            shift
+            ;;
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        --template-dir)
+            template_dir=$2
+            shift 2
+            ;;
+        --config-file)
+            config_file=$2
+            shift 2
+            ;;
+        --output-file)
+            output_file=$2
+            shift 2
+            ;;
+        --todo-pattern)
+            todo_pattern=$2
+            shift 2
+            ;;
+        --version-file)
+            version_file=$2
+            shift 2
+            ;;
+        --model)
+            model=$2
+            shift 2
+            ;;
+        --model-provider)
+            model_provider=$2
+            shift 2
+            ;;
+        --api-model)
+            api_model=$2
+            shift 2
+            ;;
+        --api-url)
+            api_url=$2
+            shift 2
+            ;;
+        --update-mode)
+            update_mode=$2
+            shift 2
+            ;;
+        --section-name)
+            section_name=$2
+            shift 2
+            ;;
+        --)
+            shift
+            break
+            ;;
+        --*)
+            echo "Unknown option or argument: $1" >&2
+            show_help
+            exit 1
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            show_help
+            exit 1
+            ;;
         esac
     done
-    # Debug output
+
     if [ "$debug" = true ]; then
         echo "Parsed options:"
         echo "  Subcommand: $subcmd"
@@ -221,7 +281,6 @@ parse_args() {
         echo "  Section Name: $section_name"
     fi
 }
-
 
 # -------------------------------------------------------------------
 # Subcommand Implementations
@@ -255,7 +314,6 @@ parse_args() {
 #         printf 'Summary written to %s\n' "$output_file"
 #     else printf '%s\n' "$res"; fi
 # }
-
 
 # run_changelog() {
 #     hist=$(mktemp)
@@ -301,25 +359,124 @@ parse_args() {
 #     printf 'Announcement written to %s\n' "$out"
 # }
 
+# Helper to collect summaries for a set of commits and pass to a callback
+run_with_summaries() {
+    callback_func=$1
+    # Create a temp file to collect summaries
+    summaries_doc=$(mktemp)
+    # If TARGET is --current, --staged, or empty, just run once
+    if [ "$TARGET" = "--current" ] || [ "$TARGET" = "--staged" ] || [ -z "$TARGET" ]; then
+        run_summary_with_commit "$TARGET" >>"$summaries_doc"
+    elif git rev-parse --verify "$TARGET" >/dev/null 2>&1 && [ "$(git rev-list --count $TARGET 2>/dev/null)" -eq 1 ]; then
+        run_summary_with_commit "$TARGET" >>"$summaries_doc"
+    else
+        for commit in $(git rev-list --reverse "$TARGET"); do
+            run_summary_with_commit "$commit" >>"$summaries_doc"
+        done
+    fi
+    "$callback_func" "$summaries_doc"
+    rm -f "$summaries_doc"
+}
+
+run_release_notes_with_summaries() {
+    summaries_doc="$1"
+    pr=$(mktemp)
+    version=$(get_current_version)
+    header="Write release notes for version $version from the following commit summaries."
+    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
+    cat "$summaries_doc" >>"$pr"
+    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
+    res=$(generate_response "$pr")
+    rm -f "$pr"
+    out=${output_file:-$release_file}
+    if [ "$update_mode" != 'none' ]; then [ "$dry_run" = false ] && printf '%s\n' "$res" >>"$out"; fi
+    printf 'Release notes updated in %s\n' "$out"
+}
+
+run_announce_with_summaries() {
+    summaries_doc="$1"
+    pr=$(mktemp)
+    version=$(get_current_version)
+    header="Write a blog-style announcement for version $version from the following commit summaries."
+    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
+    cat "$summaries_doc" >>"$pr"
+    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
+    res=$(generate_response "$pr")
+    rm -f "$pr"
+    out=${output_file:-$announce_file}
+    [ "$dry_run" = false ] && printf '%s\n' "$res" >"$out"
+    printf 'Announcement written to %s\n' "$out"
+}
+
 # -------------------------------------------------------------------
 # Main Execution
 # -------------------------------------------------------------------
 
-
-
-
 parse_args "$@"
-# Determine remote mode
-case $model_provider in
-remote) remote=true ;;
-none) remote=false ;;
-auto) command -v ollama >/dev/null 2>&1 && remote=false || remote=true ;;
-*) remote=false ;;
-esac
 
+# Determine ollama/remote mode once before parsing args
+if ! command -v ollama >/dev/null 2>&1; then
+    [ "${debug:-false}" = "true" ] && printf 'ollama not found, forcing remote mode (local model unavailable).\n'
+    model_provider="remote"
+    if [ -z "${api_key}" ]; then
+        printf 'Error: ollama not found, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+        model_provider="none"
+        printf 'Warning: Remote mode (and changelog generation) disabled because CHANGEISH_API_KEY is not set.\n' >&2
+    fi
+    if [ -z "${api_url}" ]; then
+        printf 'Error: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+        model_provider="none"
+        printf 'Warning: Changelog generation disabled because no API URL provided.\n' >&2
+    fi
+elif ! ollama list >/dev/null 2>&1; then
+    [ "${debug:-false}" = "true" ] && printf 'ollama daemon not running, forcing remote mode (local model unavailable).\n'
+    model_provider="remote"
+    if [ -z "${api_key}" ]; then
+        printf 'Error: ollama daemon not running, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+        model_provider="none"
+        printf 'Warning: Changelog generation disabled because CHANGEISH_API_KEY is not set.\n' >&2
+    fi
+    if [ -z "${api_url}" ]; then
+        printf 'Error: ollama daemon not running, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+        model_provider="none"
+        printf 'Warning: Changelog generation disabled because no API URL provided.\n' >&2
+    fi
+fi
+
+# # Determine remote mode
+# case $model_provider in
+# remote) remote=true ;;
+# none) remote=false ;;
+# auto) command -v ollama >/dev/null 2>&1 && remote=false || remote=true ;;
+# *) remote=false ;;
+# esac
+
+# # If remote is true, check required API variables
+# if [ "${remote}" = "true" ]; then
+#     if [ -z "${api_model}" ]; then
+#         api_model="${model}"
+#     fi
+#     missing_api=""
+#     if [ -z "${api_key}" ]; then
+#         missing_api="CHANGEISH_API_KEY"
+#     fi
+#     if [ -z "${api_url}" ]; then
+#         if [ -n "${missing_api}" ]; then
+#             missing_api="${missing_api} and API URL"
+#         else
+#             missing_api="API URL"
+#         fi
+#     fi
+#     if [ -n "${missing_api}" ]; then
+#         printf 'Error: Remote mode is enabled but %s is not set (use --api-url or CHANGEISH_API_URL for the URL).\n' "${missing_api}" >&2
+#         exit 1
+#     fi
+# fi
 
 # Dispatch
 run_with_commits() {
+    [ "$debug" = true ] && printf 'Debug: Running with commits...%s : %s\n' "$1" "$TARGET"
+
     run_func=$1
     # If TARGET is --current, --staged, or empty, just run once
     if [ "$TARGET" = "--current" ] || [ "$TARGET" = "--staged" ] || [ -z "$TARGET" ]; then
@@ -336,11 +493,12 @@ run_with_commits() {
 }
 
 run_message_with_commit() {
+    [ "$debug" = "true" ] && printf 'Generating commit message for %s...\n' "$1"
     commit_id="$1"
     hist=$(mktemp)
-    build_history "$hist" "$commit_id"
+    build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
-    printf '%s\n\n<<GIT_HISTORY>>\n' "$commit_message_prompt" >"$pr"
+    printf '%s\n\n<<GIT_HISTORY>>\n' "${commit_message_prompt}" >"$pr"
     cat "$hist" >>"$pr"
     printf '<<GIT_HISTORY>>' >>"$pr"
 
@@ -352,12 +510,13 @@ run_message_with_commit() {
         [ "$dry_run" = false ] && printf '%s' "$res" >"$output_file"
         printf 'Message written to %s\n' "$output_file"
     else printf '%s\n' "$res"; fi
+
 }
 
 run_summary_with_commit() {
     commit_id="$1"
     hist=$(mktemp)
-    build_history "$hist" "$commit_id"
+    build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
     printf '%s\n\n<<GIT_HISTORY>>\n' "$summary_prompt" >"$pr"
     cat "$hist" >>"$pr"
@@ -373,7 +532,7 @@ run_summary_with_commit() {
 run_changelog_with_commit() {
     commit_id="$1"
     hist=$(mktemp)
-    build_history "$hist" "$commit_id"
+    build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
     version=$(get_current_version)
     header="Write a changelog for version $version from the following git history."
@@ -390,7 +549,7 @@ run_changelog_with_commit() {
 run_release_notes_with_commit() {
     commit_id="$1"
     hist=$(mktemp)
-    build_history "$hist" "$commit_id"
+    build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
     version=$(get_current_version)
     header="Write release notes for version $version from the following git history."
@@ -405,7 +564,7 @@ run_release_notes_with_commit() {
 run_announce_with_commit() {
     commit_id="$1"
     hist=$(mktemp)
-    build_history "$hist" "$commit_id"
+    build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
     header="Write a blog-style announcement for version $(get_current_version) from the following git history."
     generate_prompt_file "$pr" 'announce.tpl' "$header" "$hist"
@@ -416,14 +575,14 @@ run_announce_with_commit() {
     printf 'Announcement written to %s\n' "$out"
 }
 
-case $subcmd in
+case ${subcmd} in
 update) run_update ;;
 available-releases) run_available_releases ;;
 help) show_help ;;
 message) run_with_commits run_message_with_commit ;;
 summary) run_with_commits run_summary_with_commit ;;
+release-notes) run_with_summaries run_release_notes_with_summaries ;;
+announce) run_with_summaries run_announce_with_summaries ;;
 changelog) run_with_commits run_changelog_with_commit ;;
-release-notes) run_with_commits run_release_notes_with_commit ;;
-announce) run_with_commits run_announce_with_commit ;;
 *) show_help ;;
 esac
