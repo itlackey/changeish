@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 
 mkdir -p "$BATS_TEST_DIRNAME/.logs"
-source "$BATS_TEST_DIRNAME/../changes.sh"
+source "$BATS_TEST_DIRNAME/../src/helpers.sh"
 export ERROR_LOG="$BATS_TEST_DIRNAME/.logs/error.log"
 load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
