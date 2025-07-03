@@ -12,6 +12,10 @@ version_file=''
 template_name=''
 subcmd=''
 
+# Prompts
+commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
+default_summary_prompt='Task: Provide a human-readable summary of the changes described in the following git diff. The summary should be no more than five sentences long. Output only the summary text.'
+
 # Model settings
 model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
 model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
@@ -33,7 +37,17 @@ is_valid_git_range() {
 is_valid_pattern() {
     git ls-files --error-unmatch "$1" >/dev/null 2>&1
 }
-
+# Resolve script directory robustly, whether sourced or executed
+# Works in POSIX sh, bash, zsh, dash
+get_script_dir() {
+    # $1: path to script (may be $0 or ${BASH_SOURCE[0]})
+    script="$1"
+    case "$script" in
+    /*) dir=$(dirname "$script") ;;
+    *) dir=$(cd "$(dirname "$script")" 2>/dev/null && pwd) ;;
+    esac
+    printf '%s\n' "$dir"
+}
 # Parse global flags and detect subcommand/target/pattern
 parse_args() {
     subcmd=""
@@ -44,7 +58,7 @@ parse_args() {
     set -- "$@"
 
     # Early config file parsing
-    config_file=""
+    config_file="$PWD/.env"
     while [ $# -gt 0 ]; do
         case "$1" in
         --config-file)
@@ -147,6 +161,16 @@ parse_args() {
     if [ -n "$config_file" ] && [ -f "$config_file" ]; then
         # shellcheck disable=SC1090
         . "$config_file"
+        [ -n "$debug" ] && cat "${config_file}"
+        [ -n "$debug" ] && printf '\nLoaded config file: %s\n' "$config_file"
+
+        # Override defaults with config file values
+        model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
+        model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
+        api_model=${CHANGEISH_API_MODEL:-}
+        api_url=${CHANGEISH_API_URL:-}
+        api_key=${CHANGEISH_API_KEY:-}
+
     elif [ -n "$config_file" ]; then
         printf 'Error: config file "%s" not found.\n' "$config_file"
     fi
@@ -438,9 +462,8 @@ build_history() {
         fi
     fi
 
-
     if [ -n "$version_info" ]; then
-    [ -n "$debug" ] && printf 'Debug: Found version info: %s\n' "$version_info"
+        [ -n "$debug" ] && printf 'Debug: Found version info: %s\n' "$version_info"
         printf '%s\n' "$version_info" >>"$hist"
     fi
 
