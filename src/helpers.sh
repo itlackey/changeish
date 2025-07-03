@@ -130,7 +130,6 @@ parse_args() {
         printf 'Error: config file "%s" not found.\n' "$config_file"
     fi
 
-    printf 'Subcommand: %s\n' "$subcmd"
 
     # 2. Next arg: target (if present and not option)
     if [ $# -gt 0 ]; then
@@ -463,14 +462,22 @@ build_history() {
     [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit"
 
     : >"$hist"
-    printf '**Message:** %s\n' "$(git log -1 --pretty=%B "${commit}^!")" >>"$hist"
+
+    # Correct `git log` usage based on commit state
+    if [ "$commit" = "--cached" ]; then
+        printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+    elif [ "$commit" = "--current" ] || [ -z "$commit" ]; then
+        printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+    else
+        printf '**Message:** %s\n' "$(git log -1 --pretty=%B "${commit}^!")" >>"$hist"
+    fi
 
     # Version detection logic
     found_version_file=""
     if [ -n "$version_file" ] && [ -f "$version_file" ]; then
         found_version_file="$version_file"
     else
-        for vf in changes.sh package.json pyproject.toml setup.py Cargo.toml composer.json build.gradle pom.xml; do
+        for vf in src/changes.sh package.json pyproject.toml setup.py Cargo.toml composer.json build.gradle pom.xml; do
             [ -f "$vf" ] && {
                 found_version_file="$vf"
                 break

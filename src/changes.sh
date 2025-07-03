@@ -227,7 +227,7 @@ cmd_message() {
                 printf 'Error: Invalid commit ID: %s\n' "$commit_id" >&2
                 exit 1
             fi
-            git log -1 --pretty=%B "$commit_id"
+            git log -1 --pretty=%B "$commit_id" | sed '${/^$/d;}'
             exit 0
         fi
     fi
