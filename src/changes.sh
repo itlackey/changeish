@@ -19,33 +19,33 @@ SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 PROMPT_DIR="$SCRIPT_DIR/prompts"
 . "$SCRIPT_DIR/helpers.sh"
 
-TARGET=""
-PATTERN=""
+# TARGET=""
+# PATTERN=""
 
-debug=""
-dry_run=""
-template_dir="$PROMPT_DIR"
-output_file=''
-todo_pattern='*todo*'
-version_file=''
+# debug=""
+# dry_run=""
+# template_dir="$PROMPT_DIR"
+# output_file=''
+# todo_pattern='*todo*'
+# version_file=''
 
-# Subcommand & templates
-template_name=''
-subcmd=''
+# # Subcommand & templates
+# template_name=''
+# subcmd=''
 
-# Model settings
-model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
-model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
-api_model=${CHANGEISH_API_MODEL:-}
-api_url=${CHANGEISH_API_URL:-}
-api_key=${CHANGEISH_API_KEY:-}
+# # Model settings
+# model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
+# model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
+# api_model=${CHANGEISH_API_MODEL:-}
+# api_url=${CHANGEISH_API_URL:-}
+# api_key=${CHANGEISH_API_KEY:-}
 
-# Changelog & release defaults
-changelog_file='CHANGELOG.md'
-release_file='RELEASE_NOTES.md'
-announce_file='ANNOUNCEMENT.md'
-update_mode='auto'
-section_name='auto'
+# # Changelog & release defaults
+# changelog_file='CHANGELOG.md'
+# release_file='RELEASE_NOTES.md'
+# announce_file='ANNOUNCEMENT.md'
+# update_mode='auto'
+# section_name='auto'
 
 # Prompts
 commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
@@ -113,13 +113,7 @@ Examples:
 EOF
 }
 
-is_valid_git_range() {
-    git rev-list "$1" >/dev/null 2>&1
-}
 
-is_valid_pattern() {
-    git ls-files --error-unmatch "$1" >/dev/null 2>&1
-}
 
 # Helper: build prompt file with tag and content
 build_prompt_file() {
@@ -134,7 +128,7 @@ build_prompt_file() {
 # Parse global flags and detect subcommand/target/pattern
 
 # Parse global flags and detect subcommand/target/pattern
-parse_args() {
+parse_args_og() {
     subcmd=""
     debug=false
     dry_run=false

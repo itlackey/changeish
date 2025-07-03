@@ -1,3 +1,273 @@
+TARGET=""
+PATTERN=""
+
+debug=""
+dry_run=""
+template_dir="$PROMPT_DIR"
+output_file=''
+todo_pattern='*todo*'
+version_file=''
+
+# Subcommand & templates
+template_name=''
+subcmd=''
+
+# Model settings
+model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
+model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
+api_model=${CHANGEISH_API_MODEL:-}
+api_url=${CHANGEISH_API_URL:-}
+api_key=${CHANGEISH_API_KEY:-}
+
+# Changelog & release defaults
+changelog_file='CHANGELOG.md'
+release_file='RELEASE_NOTES.md'
+announce_file='ANNOUNCEMENT.md'
+update_mode='auto'
+section_name='auto'
+
+is_valid_git_range() {
+    git rev-list "$1" >/dev/null 2>&1
+}
+
+is_valid_pattern() {
+    git ls-files --error-unmatch "$1" >/dev/null 2>&1
+}
+
+# Parse global flags and detect subcommand/target/pattern
+parse_args() {
+    subcmd=""
+    debug=false
+    dry_run=false
+debug="1"
+    # Preserve original arguments for later parsing
+    set -- "$@"
+
+    # Early config file parsing
+    config_file=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --config-file)
+            shift
+            if [ $# -gt 0 ]; then
+                config_file="$1"
+                shift
+            fi
+            ;;
+        --config-file=*)
+            config_file="${1#--config-file=}"
+            shift
+            ;;
+        *)
+            break
+            ;;
+        esac
+        [ -n "$config_file" ] && break
+    done
+
+    # Restore original arguments for main parsing
+    set -- "$@"
+
+    # 1. Subcommand or help/version must be first
+    if [ $# -eq 0 ]; then
+        printf 'No arguments provided.\n'
+        exit 0
+    fi
+    case "$1" in
+    -h | --help | help)
+        show_help
+        exit 0
+        ;;
+    -v | --version)
+        show_version
+        exit 0
+        ;;
+    message | summary | changelog | release-notes | announce | available-releases | update)
+        subcmd=$1
+        shift
+        ;;
+    *)
+        echo "First argument must be a subcommand or -h/--help/-v/--version"
+        show_help
+        exit 1
+        ;;
+    esac
+
+    printf 'Subcommand: %s\n' "$subcmd"
+
+    # 2. Next arg: target (if present and not option)
+    if [ $# -gt 0 ]; then
+        case "$1" in
+        --current | --staged | --cached)
+            if [ "$1" = "--staged" ]; then
+                TARGET="--cached"
+            else
+                TARGET="$1"
+            fi
+            shift
+            ;;
+        -*)
+            : # skip, no target
+            ;;
+        *)
+            # Check for commit range (e.g., v1..v2)
+            if echo "$1" | grep -q '\.\.'; then
+                TARGET="$1"
+                shift
+            elif is_valid_git_range "$1"; then
+                TARGET="$1"
+                shift
+            fi
+            # else: do not shift, let it fall through to pattern parsing
+            ;;
+        esac
+    fi
+
+    if [ -z "$TARGET" ]; then
+        # If no target specified, default to current working tree
+        TARGET="--current"
+    fi
+    # 3. Collect all non-option args as pattern (until first option or end)
+    PATTERN=""
+    while [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; do
+        if [ -z "$PATTERN" ]; then
+            PATTERN="$1"
+        else
+            PATTERN="$PATTERN $1"
+        fi
+        shift
+    done
+
+    # -------------------------------------------------------------------
+    # Config file handling (early parse)
+    # -------------------------------------------------------------------
+    [ -n "$debug" ] && printf 'Loading config file: %s\n' "$config_file"
+
+    # Always attempt to source config file if it exists; empty config_file is a valid state.
+    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+        # shellcheck disable=SC1090
+        . "$config_file"
+    elif [ -n "$config_file" ]; then
+        printf 'Error: config file "%s" not found.\n' "$config_file"
+    fi
+
+    # 4. Remaining args: global options
+    while [ $# -gt 0 ]; do
+        case "$1" in
+        --verbose)
+            debug=true
+            shift
+            ;;
+        --dry-run)
+            dry_run=true
+            shift
+            ;;
+        --template-dir)
+            template_dir=$2
+            shift 2
+            ;;
+        --config-file)
+            config_file=$2
+            shift 2
+            ;;
+        --output-file)
+            output_file=$2
+            shift 2
+            ;;
+        --todo-pattern)
+            todo_pattern=$2
+            shift 2
+            ;;
+        --version-file)
+            version_file=$2
+            shift 2
+            ;;
+        --model)
+            model=$2
+            shift 2
+            ;;
+        --model-provider)
+            model_provider=$2
+            shift 2
+            ;;
+        --api-model)
+            api_model=$2
+            shift 2
+            ;;
+        --api-url)
+            api_url=$2
+            shift 2
+            ;;
+        --update-mode)
+            update_mode=$2
+            shift 2
+            ;;
+        --section-name)
+            section_name=$2
+            shift 2
+            ;;
+        --)
+            echo "Unknown option or argument: $1" >&2
+            show_help
+            exit 1
+            ;;
+        --*)
+            echo "Unknown option or argument: $1" >&2
+            show_help
+            exit 1
+            ;;
+        *)
+            echo "Unknown argument: $1" >&2
+            show_help
+            exit 1
+            ;;
+        esac
+    done
+
+    # Determine ollama/remote mode once before parsing args
+    if ! command -v ollama >/dev/null 2>&1; then
+        [ -n "${debug}" ] && printf 'ollama not found, forcing remote mode (local model unavailable).\n'
+        model_provider="remote"
+        if [ -z "$api_key" ]; then
+            printf 'Error: ollama not found, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+            model_provider="none"
+        fi
+        if [ -z "$api_url" ]; then
+            printf 'Error: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+            model_provider="none"
+        fi
+    elif ! ollama list >/dev/null 2>&1; then
+        [ -n "$debug" ] && printf 'ollama daemon not running, forcing remote mode (local model unavailable).\n'
+        model_provider="remote"
+        if [ -z "$api_key" ]; then
+            printf 'Error: ollama daemon not running, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+            model_provider="none"
+        fi
+        if [ -z "$api_url" ]; then
+            printf 'Error: ollama daemon not running, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+            model_provider="none"
+        fi
+    fi
+
+    if [ "$debug" = true ]; then
+        echo "Parsed options:"
+        echo "  Subcommand: $subcmd"
+        echo "  Target: $TARGET"
+        echo "  Pattern: $PATTERN"
+        echo "  Template Directory: $template_dir"
+        echo "  Config File: $config_file"
+        echo "  Output File: $output_file"
+        echo "  TODO Pattern: $todo_pattern"
+        echo "  Version File: $version_file"
+        echo "  Model: $model"
+        echo "  Model Provider: $model_provider"
+        echo "  API Model: $api_model"
+        echo "  API URL: $api_url"
+        echo "  Update Mode: $update_mode"
+        echo "  Section Name: $section_name"
+    fi
+}
+
 # Show all available release tags
 get_available_releases() {
     curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[] | .tag_name'
@@ -116,7 +386,7 @@ build_history() {
     commit=$2
     todo_pattern="${3:-${CHANGEISH_TODO_PATTERN}:-"TODO"}"
 
-    [ "$debug" = true ] &&  printf 'Debug: Building history for commit %s\n' "$commit"
+    [ "$debug" = true ] && printf 'Debug: Building history for commit %s\n' "$commit"
 
     : >"$hist"
     # Version detection logic
@@ -155,7 +425,7 @@ build_history() {
         fi
     fi
 
-    [ "$debug" = true ] &&  printf 'Debug: Found version info: %s\n' "$version_diff"
+    [ "$debug" = true ] && printf 'Debug: Found version info: %s\n' "$version_diff"
 
     if [ -n "$version_info" ]; then
         printf '%s\n' "$version_info" >>"$hist"
@@ -181,12 +451,12 @@ build_history() {
     printf '\n```' >>"$hist"
     # Append TODO section
     td=$(extract_todo_changes "$commit" "$todo_pattern")
-    [ "$debug" = true ] &&  printf 'Debug: TODO changes extracted: %s\n' "$td"
+    [ "$debug" = true ] && printf 'Debug: TODO changes extracted: %s\n' "$td"
     [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
-    
+
     # Return 0 in case todo changes are empty
     return 0
-    
+
 }
 
 # Remove duplicate blank lines and ensure file ends with newline
