@@ -81,13 +81,13 @@ parse_args() {
     config_file=""
     i=1
     while [ $i -le $# ]; do
-        arg="${!i}"
+        eval "arg=\${$i}"
         case "$arg" in
         --config-file)
             next=$((i + 1))
             if [ $next -le $# ]; then
-                config_file="${!next}"
-                [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file %s\n' "$config_file"
+                eval "config_file=\${$next}"
+                [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file %s\n' "${config_file}"
                 break
             else
                 printf 'Error: --config-file requires a file path argument.\n'
@@ -96,8 +96,11 @@ parse_args() {
             ;;
         --config-file=*)
             config_file="${arg#--config-file=}"
-            [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file=%s\n' "$config_file"
+            [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file=%s\n' "${config_file}"
             break
+            ;;
+        *)
+            # Not a config file argument, continue parsing
             ;;
         esac
         i=$((i + 1))
