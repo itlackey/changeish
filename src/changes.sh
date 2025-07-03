@@ -9,15 +9,40 @@ IFS='\n'
 # -------------------------------------------------------------------
 # Paths & Defaults
 # -------------------------------------------------------------------
-# Portable script path resolution (no readlink -f)
-SCRIPT_PATH="$0"
-case "$SCRIPT_PATH" in
-/*) ;; # absolute
-*) SCRIPT_PATH="$PWD/$SCRIPT_PATH" ;;
-esac
-SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
+# Resolve script directory robustly, whether sourced or executed
+# Works in POSIX sh, bash, zsh, dash
+get_script_dir() {
+    # $1: path to script (may be $0 or ${BASH_SOURCE[0]})
+    script="$1"
+    case "$script" in
+        /*) dir=$(dirname "$script") ;;
+        *) dir=$(cd "$(dirname "$script")" 2>/dev/null && pwd) ;;
+    esac
+    printf '%s\n' "$dir"
+}
+
+# Detect if sourced (works in bash, zsh, dash, sh)
+_is_sourced=0
+# shellcheck disable=SC2292
+if [ "${BASH_SOURCE[0]:-}" != "" ] && [ "${BASH_SOURCE[0]:-}" != "$0" ]; then
+    _is_sourced=1
+elif [ -n "${ZSH_EVAL_CONTEXT:-}" ] && [[ "$ZSH_EVAL_CONTEXT" == *:file ]]; then
+    _is_sourced=1
+fi
+
+# Use BASH_SOURCE if available, else $0
+if [ -n "${BASH_SOURCE[0]:-}" ]; then
+    _SCRIPT_PATH="${BASH_SOURCE[0]}"
+else
+    _SCRIPT_PATH="$0"
+fi
+
+SCRIPT_DIR="$(get_script_dir "$_SCRIPT_PATH")"
 PROMPT_DIR="$SCRIPT_DIR/prompts"
+
+# shellcheck source=/dev/null
 . "$SCRIPT_DIR/helpers.sh"
+
 
 # TARGET=""
 # PATTERN=""
@@ -518,25 +543,27 @@ get_current_version() {
     printf '%s\n' "$__VERSION"
 }
 
-printf 'Parsing arguments...\n'
-parse_args "$@"
+if [ "$_is_sourced" -eq 0 ]; then
+    printf 'Parsing arguments...\n'
+    parse_args "$@"
 
-# Dispatch logic
-case "${subcmd}" in
-summary) cmd_summary ;;
-release-notes) cmd_release_notes ;;
-announce) cmd_announce ;;
-message) cmd_message "${TARGET}" ;;
-changelog) cmd_changelog ;;
-help)
-    show_help
-    exit 0
-    ;;
-available-releases)
-    get_available_releases
-    ;;
-update)
-    run_update
-    ;;
-*) cmd_message "${TARGET}" ;;
-esac
+    # Dispatch logic
+    case "${subcmd}" in
+    summary) cmd_summary ;;
+    release-notes) cmd_release_notes ;;
+    announce) cmd_announce ;;
+    message) cmd_message "${TARGET}" ;;
+    changelog) cmd_changelog ;;
+    help)
+        show_help
+        exit 0
+        ;;
+    available-releases)
+        get_available_releases
+        ;;
+    update)
+        run_update
+        ;;
+    *) cmd_message "${TARGET}" ;;
+    esac
+fi

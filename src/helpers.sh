@@ -408,11 +408,33 @@ build_history() {
 
     version_info=""
     if [ -n "$found_version_file" ]; then
-        # Extract version directly from the file at the specified commit
-        current_file_version=$(git show "${commit}:${found_version_file}" | grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?')
-        parsed_version=$(parse_version "$current_file_version")
-        if [ -n "$parsed_version" ]; then
-            version_info="**Version:** $parsed_version"
+        if [ "$commit" = "--current" ] || [ -z "$commit" ]; then
+            # Use working tree version file
+            if [ -f "$found_version_file" ]; then
+                current_file_version=$(grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$found_version_file")
+                parsed_version=$(parse_version "$current_file_version")
+                if [ -n "$parsed_version" ]; then
+                    version_info="**Version:** $parsed_version"
+                fi
+            fi
+        elif [ "$commit" = "--cached" ]; then
+            # Use staged version file
+            if git ls-files --error-unmatch "$found_version_file" >/dev/null 2>&1; then
+                current_file_version=$(git show ":$found_version_file" | grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?')
+                parsed_version=$(parse_version "$current_file_version")
+                if [ -n "$parsed_version" ]; then
+                    version_info="**Version:** $parsed_version"
+                fi
+            fi
+        else
+            # Use version file from specific commit, if it exists
+            if git ls-tree "$commit" -- "$found_version_file" | grep -q .; then
+                current_file_version=$(git show "${commit}:${found_version_file}" | grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?')
+                parsed_version=$(parse_version "$current_file_version")
+                if [ -n "$parsed_version" ]; then
+                    version_info="**Version:** $parsed_version"
+                fi
+            fi
         fi
     fi
 
