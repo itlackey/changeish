@@ -18,7 +18,9 @@ setup() {
   alias ollama='command_ollama'
 
   # make a dummy config file
-  echo "api_key=XYZ" > tmp.cfg
+  echo "CHANGEISH_API_KEY=XYZ" > tmp.cfg
+  echo "CHANGEISH_API_URL=TEST_URL" >> tmp.cfg
+  echo "CHANGEISH_API_MODEL=TEST_MODEL" >> tmp.cfg
   chmod +r tmp.cfg
 
   # source the script under test
@@ -114,17 +116,21 @@ teardown() {
 
 # 6. early --config-file parsing (nonexistent)
 @test "early --config-file=bad prints error but continues" {
-  run parse_args --config-file=bad message --verbose
-  [ "$status" -eq 0 ]
+  run parse_args message --config-file bad --verbose
+
+  assert_success
   assert_output --partial 'Error: config file "bad" not found.'
   assert_output --partial "Subcommand: message"
 }
 
 # 7. early --config-file parsing (exists)
 @test "early --config-file tmp.cfg loads and prints it" {
-  run parse_args --config-file tmp.cfg summary --verbose
+  run parse_args summary --config-file tmp.cfg --verbose
   [ "$status" -eq 0 ]
-  assert_output --partial "Loading config file: tmp.cfg"
+  assert_output --partial "Config Loaded: true"
+  assert_output --partial "Config File: tmp.cfg"
+  assert_output --partial "API URL: TEST_URL"
+  assert_output --partial "API Model: TEST_MODEL"
   assert_output --partial "Subcommand: summary"
 }
 

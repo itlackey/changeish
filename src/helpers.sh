@@ -1,6 +1,8 @@
 TARGET=""
 PATTERN=""
 
+config_file=""
+is_config_loaded=false
 debug=""
 dry_run=""
 template_dir="$PROMPT_DIR"
@@ -43,30 +45,6 @@ parse_args() {
     subcmd=""
     debug=""
     dry_run=""
-    # Preserve original arguments for later parsing
-    set -- "$@"
-
-    # Early config file parsing
-    config_file="$PWD/.env"
-    while [ $# -gt 0 ]; do
-        case "$1" in
-        --config-file)
-            shift
-            if [ $# -gt 0 ]; then
-                config_file="$1"
-                shift
-            fi
-            ;;
-        --config-file=*)
-            config_file="${1#--config-file=}"
-            shift
-            ;;
-        *)
-            break
-            ;;
-        esac
-        [ -n "$config_file" ] && break
-    done
 
     # Restore original arguments for main parsing
     set -- "$@"
@@ -95,6 +73,59 @@ parse_args() {
         exit 1
         ;;
     esac
+
+    # Preserve original arguments for later parsing
+    set -- "$@"
+
+    # Early config file parsing (handle both --config-file and --config-file=)
+    config_file=""
+    i=1
+    while [ $i -le $# ]; do
+        arg="${!i}"
+        case "$arg" in
+        --config-file)
+            next=$((i + 1))
+            if [ $next -le $# ]; then
+                config_file="${!next}"
+                [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file %s\n' "$config_file"
+                break
+            else
+                printf 'Error: --config-file requires a file path argument.\n'
+                exit 1
+            fi
+            ;;
+        --config-file=*)
+            config_file="${arg#--config-file=}"
+            [ -n "$debug" ] && printf 'Debug: Found config file argument: --config-file=%s\n' "$config_file"
+            break
+            ;;
+        esac
+        i=$((i + 1))
+    done
+
+    # -------------------------------------------------------------------
+    # Config file handling (early parse)
+    # -------------------------------------------------------------------
+    [ -n "$debug" ] && printf 'Loading config file: %s\n' "$config_file"
+
+    # Always attempt to source config file if it exists; empty config_file is a valid state.
+    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
+        # shellcheck disable=SC1090
+        . "$config_file"
+        is_config_loaded=true
+        [ -n "$debug" ] && cat "${config_file}"
+        [ -n "$debug" ] && printf '\nLoaded config file: %s\n' "$config_file"
+
+        # Override defaults with config file values
+        model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
+        model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
+        api_model=${CHANGEISH_API_MODEL:-}
+        api_url=${CHANGEISH_API_URL:-}
+        api_key=${CHANGEISH_API_KEY:-}
+
+    elif [ -n "$config_file" ]; then
+        printf 'Error: config file "%s" not found.\n' "$config_file"
+    fi
 
     printf 'Subcommand: %s\n' "$subcmd"
 
@@ -140,29 +171,6 @@ parse_args() {
         fi
         shift
     done
-
-    # -------------------------------------------------------------------
-    # Config file handling (early parse)
-    # -------------------------------------------------------------------
-    [ -n "$debug" ] && printf 'Loading config file: %s\n' "$config_file"
-
-    # Always attempt to source config file if it exists; empty config_file is a valid state.
-    if [ -n "$config_file" ] && [ -f "$config_file" ]; then
-        # shellcheck disable=SC1090
-        . "$config_file"
-        [ -n "$debug" ] && cat "${config_file}"
-        [ -n "$debug" ] && printf '\nLoaded config file: %s\n' "$config_file"
-
-        # Override defaults with config file values
-        model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
-        model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
-        api_model=${CHANGEISH_API_MODEL:-}
-        api_url=${CHANGEISH_API_URL:-}
-        api_key=${CHANGEISH_API_KEY:-}
-
-    elif [ -n "$config_file" ]; then
-        printf 'Error: config file "%s" not found.\n' "$config_file"
-    fi
 
     # 4. Remaining args: global options
     while [ $# -gt 0 ]; do
@@ -264,11 +272,13 @@ parse_args() {
 
     if [ "$debug" = true ]; then
         echo "Parsed options:"
+        echo "  Debug: $debug"
         echo "  Subcommand: $subcmd"
         echo "  Target: $TARGET"
         echo "  Pattern: $PATTERN"
         echo "  Template Directory: $template_dir"
         echo "  Config File: $config_file"
+        echo "  Config Loaded: $is_config_loaded"
         echo "  Output File: $output_file"
         echo "  TODO Pattern: $todo_pattern"
         echo "  Version File: $version_file"
@@ -336,11 +346,11 @@ json_escape() {
 }
 
 extract_content() {
-  # Usage: extract_content "$json_string"
-  json=$1
+    # Usage: extract_content "$json_string"
+    json=$1
 
-  # 1) pull out the raw, escaped value of "content":
-  raw=$(printf '%s' "$json" | awk '
+    # 1) pull out the raw, escaped value of "content":
+    raw=$(printf '%s' "$json" | awk '
   {
     text = $0
     # find the start of "content"
@@ -378,10 +388,9 @@ extract_content() {
     print val
   }')
 
-  # 2) interpret backslash-escapes (\n, \", \\) into real characters:
-  printf '%b' "$raw"
+    # 2) interpret backslash-escapes (\n, \", \\) into real characters:
+    printf '%b' "$raw"
 }
-
 
 generate_remote() {
     content=$(cat "$1")
@@ -392,12 +401,10 @@ generate_remote() {
     body=$(printf '{"model":"%s","messages":[{"role":"user","content":%s}],"max_completion_tokens":8192}' \
         "${api_model}" "${escaped_content}")
 
-
     response=$(curl -s -X POST "${api_url}" \
         -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
         -d "${body}")
-
 
     if [ -n "${debug}" ]; then
         echo "Response from remote API:" >&2

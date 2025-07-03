@@ -1,0 +1,23 @@
+{"choices":[{"content_filter_results":{"hate":{"filtered":false,"severity":"safe"},"protected_material_code":{"filtered":false,"detected":false},"protected_material_text":{"filtered":false,"detected":false},"self_harm":{"filtered":false,"severity":"safe"},"sexual":{"filtered":false,"severity":"safe"},"violence":{"filtered":false,"severity":"safe"}},"finish_reason":"stop","index":0,"logprobs":null,"message":{"annotations":[],"content":"### Announcement: Version 0.2.0
+
+We are pleased to announce the release of **Version 0.2.0** of our project. This version includes significant improvements and new features. Below is a summary of the key changes implemented in this release:
+
+#### Enhancements
+- **Improved Command Structure**: Refined the command structure for generating prompts and responses, enhancing usability.
+- **New Functionality**: Introduced the `extract_content` function to process JSON responses more effectively, extracting relevant fields with improved accuracy.
+- **Debugging Improvements**: Added detailed debug information that helps track issues more effectively during command execution.
+
+#### Bug Fixes
+- Resolved several inconsistencies in the command prompts and responses, ensuring a smoother user experience.
+- Fixed issues related to how response data is generated and displayed, providing a clearer output in logs.
+
+#### Performance
+- Optimized functions for summarizing change logs, resulting in a more efficient execution when processing commits.
+- Streamlined code within `src/helpers.sh` to reduce complexity and improve overall performance.
+
+#### Cleaning Up
+- Removed unused comment sections in the code, leading to a cleaner and more maintainable codebase.
+
+We encourage users to update to this latest version to take advantage of these improvements and enjoy a better experience. Thank you for your continued support and feedback! 
+
+For detailed information on all changes, please refer to the `CHANGELOG.md` and `RELEASE_NOTES.md` files included in this release.","refusal":null,"role":"assistant"}}],"created":1751570743,"id":"chatcmpl-BpJqxT2bzDjpw0SlokS9IawiQMzJ1","model":"gpt-4o-mini-2024-07-18","object":"chat.completion","prompt_filter_results":[{"prompt_index":0,"content_filter_results":{"hate":{"filtered":false,"severity":"safe"},"jailbreak":{"filtered":false,"detected":false},"self_harm":{"filtered":false,"severity":"safe"},"sexual":{"filtered":false,"severity":"safe"},"violence":{"filtered":false,"severity":"safe"}}}],"system_fingerprint":"fp_efad92c60b","usage":{"completion_tokens":301,"completion_tokens_details":{"accepted_prediction_tokens":0,"audio_tokens":0,"reasoning_tokens":0,"rejected_prediction_tokens":0},"prompt_tokens":2026,"prompt_tokens_details":{"audio_tokens":0,"cached_tokens":0},"total_tokens":2327}}
