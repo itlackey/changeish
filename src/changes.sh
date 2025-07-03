@@ -76,7 +76,7 @@ section_name='auto'
 
 # Prompts
 commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
-summary_prompt='Task: Provide a concise, human-readable summary (2-3 sentences) of the changes described in the following git diff. Output only the summary text.'
+default_summary_prompt='Task: Provide a concise, human-readable summary (2-3 sentences) of the changes described in the following git diff. Output only the summary text.'
 
 # -------------------------------------------------------------------
 # Helper Functions
@@ -165,7 +165,12 @@ parse_args() {
     # 2. Next arg: target (if present and not option)
     if [ $# -gt 0 ]; then
         case "$1" in
-        --current | --staged)
+        --current | --staged | --cached)
+            if [ "$1" = "--staged" ]; then
+                TARGET="--cached"
+            else
+                TARGET="$1"
+            fi
             TARGET=$1
             shift
             ;;
@@ -180,6 +185,11 @@ parse_args() {
             # else: do not shift, let it fall through to pattern parsing
             ;;
         esac
+    fi
+
+    if [ -z "$TARGET" ]; then
+        # If no target specified, default to current working tree
+        TARGET="--current"
     fi
     # 3. Collect all non-option args as pattern (until first option or end)
     PATTERN=""
@@ -360,6 +370,41 @@ parse_args() {
 # }
 
 # Helper to collect summaries for a set of commits and pass to a callback
+create_summary_file() {
+    diff_spec="$1"
+    sum_prompt_file="$2"
+    summaries_doc="$3"
+
+    summary_prompt=$(cat "$sum_prompt_file"):-"$default_summary_prompt"
+
+    # If TARGET is --current, --staged, or empty, just run once
+    if [ "$diff_spec" = "--current" ] || [ "$diff_spec" = "--staged" ] || [ -z "$diff_spec" ]; then
+        get_summary_for_commit "$diff_spec" "$summary_prompt" >>"$summaries_doc"
+    elif git rev-parse --verify "$diff_spec" >/dev/null 2>&1 && [ "$(git rev-list --count $diff_spec 2>/dev/null)" -eq 1 ]; then
+        get_summary_for_commit "$diff_spec" "$summary_prompt" >>"$summaries_doc"
+    else
+        for commit in $(git rev-list --reverse "$diff_spec"); do
+            get_summary_for_commit "$commit" "$summary_prompt" >>"$summaries_doc"
+        done
+    fi
+}
+
+get_summary_for_commit() {
+    commit_id="$1"
+    summary_prompt="$2"
+
+    hist=$(mktemp)
+    build_history "$hist" "$commit_id" "$todo_pattern"
+    pr=$(mktemp)
+    printf '%s\n\n<<GIT_HISTORY>>\n' "$summary_prompt" >"$pr"
+    cat "$hist" >>"$pr"
+    printf '<<GIT_HISTORY>>' >>"$pr"
+    res=$(generate_response "$pr")
+    rm -f "$hist" "$pr"
+    printf '%s\n' "$res"
+}
+
+# Helper to collect summaries for a set of commits and pass to a callback
 run_with_summaries() {
     callback_func=$1
     # Create a temp file to collect summaries
@@ -443,44 +488,27 @@ elif ! ollama list >/dev/null 2>&1; then
     fi
 fi
 
-# # Determine remote mode
-# case $model_provider in
-# remote) remote=true ;;
-# none) remote=false ;;
-# auto) command -v ollama >/dev/null 2>&1 && remote=false || remote=true ;;
-# *) remote=false ;;
-# esac
-
-# # If remote is true, check required API variables
-# if [ "${remote}" = "true" ]; then
-#     if [ -z "${api_model}" ]; then
-#         api_model="${model}"
-#     fi
-#     missing_api=""
-#     if [ -z "${api_key}" ]; then
-#         missing_api="CHANGEISH_API_KEY"
-#     fi
-#     if [ -z "${api_url}" ]; then
-#         if [ -n "${missing_api}" ]; then
-#             missing_api="${missing_api} and API URL"
-#         else
-#             missing_api="API URL"
-#         fi
-#     fi
-#     if [ -n "${missing_api}" ]; then
-#         printf 'Error: Remote mode is enabled but %s is not set (use --api-url or CHANGEISH_API_URL for the URL).\n' "${missing_api}" >&2
-#         exit 1
-#     fi
-# fi
-
 # Dispatch
 run_with_commits() {
     [ "$debug" = true ] && printf 'Debug: Running with commits...%s : %s\n' "$1" "$TARGET"
 
     run_func=$1
-    # If TARGET is --current, --staged, or empty, just run once
-    if [ "$TARGET" = "--current" ] || [ "$TARGET" = "--staged" ] || [ -z "$TARGET" ]; then
-        eval "$run_func" "$TARGET"
+
+    # Validation for --current and --staged
+    if [ "$TARGET" = "--current" ]; then
+        if ! git diff --quiet -- .; then
+            eval "$run_func" "$TARGET"
+        else
+            printf 'No changes in the working tree to process.\n' >&2
+            exit 1
+        fi
+    elif [ "$TARGET" = "--cached" ]; then
+        if ! git diff --cached --quiet -- .; then
+            eval "$run_func" "$TARGET"
+        else
+            printf 'No staged changes to process.\n' >&2
+            exit 1
+        fi
     # If TARGET is a single commit, run once
     elif git rev-parse --verify "$TARGET" >/dev/null 2>&1 && [ "$(git rev-list --count $TARGET 2>/dev/null)" -eq 1 ]; then
         eval "$run_func" "$TARGET"
@@ -580,7 +608,7 @@ update) run_update ;;
 available-releases) run_available_releases ;;
 help) show_help ;;
 message) run_with_commits run_message_with_commit ;;
-summary) run_with_commits run_summary_with_commit ;;
+summary) create_summary_file ;;
 release-notes) run_with_summaries run_release_notes_with_summaries ;;
 announce) run_with_summaries run_announce_with_summaries ;;
 changelog) run_with_commits run_changelog_with_commit ;;
