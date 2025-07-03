@@ -465,9 +465,11 @@ build_history() {
 
     # Correct `git log` usage based on commit state
     if [ "$commit" = "--cached" ]; then
-        printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+        #printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+        printf '**Message:** Staged Changes\n ' >>"$hist"
     elif [ "$commit" = "--current" ] || [ -z "$commit" ]; then
-        printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+        #printf '**Message:** %s\n' "$(git log -1 --pretty=%B HEAD)" >>"$hist"
+        printf '**Message:** Current Changes\n ' >>"$hist"
     else
         printf '**Message:** %s\n' "$(git log -1 --pretty=%B "${commit}^!")" >>"$hist"
     fi
