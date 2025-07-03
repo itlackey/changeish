@@ -76,7 +76,7 @@ section_name='auto'
 
 # Prompts
 commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
-default_summary_prompt='Task: Provide a concise, human-readable summary (2-3 sentences) of the changes described in the following git diff. Output only the summary text.'
+default_summary_prompt='Task: Provide a human-readable summary of the changes described in the following git diff. The summary should be no more than five sentences long. Output only the summary text.'
 
 # -------------------------------------------------------------------
 # Helper Functions
@@ -292,172 +292,10 @@ parse_args() {
     fi
 }
 
-# -------------------------------------------------------------------
-# Subcommand Implementations
-# -------------------------------------------------------------------
-# run_message() {
-#     hist=$(mktemp)
-#     build_history "$hist"
-#     pr=$(mktemp)
-#     printf '%s\n\n<<GIT_HISTORY>>\n' "$commit_message_prompt" >"$pr"
-#     cat "$hist" >>"$pr"
-#     printf '<<GIT_HISTORY>>' >>"$pr"
-#     res=$(generate_response "$pr")
-#     rm -f "$hist" "$pr"
-#     if [ -n "$output_file" ]; then
-#         [ "$dry_run" = false ] && printf '%s' "$res" >"$output_file"
-#         printf 'Message written to %s\n' "$output_file"
-#     else printf '%s\n' "$res"; fi
-# }
-
-# run_summary() {
-#     hist=$(mktemp)
-#     build_history "$hist"
-#     pr=$(mktemp)
-#     printf '%s\n\n<<GIT_HISTORY>>\n' "$summary_prompt" >"$pr"
-#     cat "$hist" >>"$pr"
-#     printf '<<GIT_HISTORY>>' >>"$pr"
-#     res=$(generate_response "$pr")
-#     rm -f "$hist" "$pr"
-#     if [ -n "$output_file" ]; then
-#         [ "$dry_run" = false ] && printf '%s' "$res" >"$output_file"
-#         printf 'Summary written to %s\n' "$output_file"
-#     else printf '%s\n' "$res"; fi
-# }
-
-# run_changelog() {
-#     hist=$(mktemp)
-#     build_history "$hist"
-#     cat "$hist"
-#     pr=$(mktemp)
-#     version=$(get_current_version)
-#     header="Write a changelog for version $version from the following git history."
-#     generate_prompt_file "$pr" 'changelog.tpl' "$header" "$hist"
-#     res=$(generate_response "$pr")
-#     rm -f "$hist" "$pr"
-#     out=${output_file:-$changelog_file}
-#     if [ "$update_mode" != 'none' ]; then
-#         [ "$dry_run" = false ] && update_changelog "$out" "$res" "$version" "$update_mode"
-#     fi
-#     printf 'Changelog updated in %s\n' "$out"
-# }
-
-# run_release_notes() {
-#     hist=$(mktemp)
-#     build_history "$hist"
-#     pr=$(mktemp)
-#     version=$(get_current_version)
-#     header="Write release notes for version $version from the following git history."
-#     generate_prompt_file "$pr" 'release.tpl' "$header" "$hist"
-#     res=$(generate_response "$pr")
-#     rm -f "$hist" "$pr"
-#     out=${output_file:-$release_file}
-#     if [ "$update_mode" != 'none' ]; then [ "$dry_run" = false ] && printf '%s\n' "$res" >>"$out"; fi
-#     printf 'Release notes updated in %s\n' "$out"
-# }
-
-# run_announce() {
-#     hist=$(mktemp)
-#     build_history "$hist"
-#     pr=$(mktemp)
-#     header="Write a blog-style announcement for version $(get_current_version) from the following git history."
-#     generate_prompt_file "$pr" 'announce.tpl' "$header" "$hist"
-#     res=$(generate_response "$pr")
-#     rm -f "$hist" "$pr"
-#     out=${output_file:-$announce_file}
-#     [ "$dry_run" = false ] && printf '%s\n' "$res" >"$out"
-#     printf 'Announcement written to %s\n' "$out"
-# }
-
-# Helper to collect summaries for a set of commits and pass to a callback
-create_summary_file() {
-    diff_spec="$1"
-    sum_prompt_file="$2"
-    summaries_doc="$3"
-
-    summary_prompt=$(cat "$sum_prompt_file"):-"$default_summary_prompt"
-
-    # If TARGET is --current, --staged, or empty, just run once
-    if [ "$diff_spec" = "--current" ] || [ "$diff_spec" = "--staged" ] || [ -z "$diff_spec" ]; then
-        get_summary_for_commit "$diff_spec" "$summary_prompt" >>"$summaries_doc"
-    elif git rev-parse --verify "$diff_spec" >/dev/null 2>&1 && [ "$(git rev-list --count $diff_spec 2>/dev/null)" -eq 1 ]; then
-        get_summary_for_commit "$diff_spec" "$summary_prompt" >>"$summaries_doc"
-    else
-        for commit in $(git rev-list --reverse "$diff_spec"); do
-            get_summary_for_commit "$commit" "$summary_prompt" >>"$summaries_doc"
-        done
-    fi
-}
-
-get_summary_for_commit() {
-    commit_id="$1"
-    summary_prompt="$2"
-
-    hist=$(mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
-    pr=$(mktemp)
-    printf '%s\n\n<<GIT_HISTORY>>\n' "$summary_prompt" >"$pr"
-    cat "$hist" >>"$pr"
-    printf '<<GIT_HISTORY>>' >>"$pr"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    printf '%s\n' "$res"
-}
-
-# Helper to collect summaries for a set of commits and pass to a callback
-run_with_summaries() {
-    callback_func=$1
-    # Create a temp file to collect summaries
-    summaries_doc=$(mktemp)
-    # If TARGET is --current, --staged, or empty, just run once
-    if [ "$TARGET" = "--current" ] || [ "$TARGET" = "--staged" ] || [ -z "$TARGET" ]; then
-        run_summary_with_commit "$TARGET" >>"$summaries_doc"
-    elif git rev-parse --verify "$TARGET" >/dev/null 2>&1 && [ "$(git rev-list --count $TARGET 2>/dev/null)" -eq 1 ]; then
-        run_summary_with_commit "$TARGET" >>"$summaries_doc"
-    else
-        for commit in $(git rev-list --reverse "$TARGET"); do
-            run_summary_with_commit "$commit" >>"$summaries_doc"
-        done
-    fi
-    "$callback_func" "$summaries_doc"
-    rm -f "$summaries_doc"
-}
-
-run_release_notes_with_summaries() {
-    summaries_doc="$1"
-    pr=$(mktemp)
-    version=$(get_current_version)
-    header="Write release notes for version $version from the following commit summaries."
-    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
-    cat "$summaries_doc" >>"$pr"
-    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
-    res=$(generate_response "$pr")
-    rm -f "$pr"
-    out=${output_file:-$release_file}
-    if [ "$update_mode" != 'none' ]; then [ "$dry_run" = false ] && printf '%s\n' "$res" >>"$out"; fi
-    printf 'Release notes updated in %s\n' "$out"
-}
-
-run_announce_with_summaries() {
-    summaries_doc="$1"
-    pr=$(mktemp)
-    version=$(get_current_version)
-    header="Write a blog-style announcement for version $version from the following commit summaries."
-    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
-    cat "$summaries_doc" >>"$pr"
-    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
-    res=$(generate_response "$pr")
-    rm -f "$pr"
-    out=${output_file:-$announce_file}
-    [ "$dry_run" = false ] && printf '%s\n' "$res" >"$out"
-    printf 'Announcement written to %s\n' "$out"
-}
-
-# -------------------------------------------------------------------
-# Main Execution
-# -------------------------------------------------------------------
-
-parse_args "$@"
+# Enable debug mode if requested
+if [ "${debug:-false}" = "true" ]; then
+    set -x
+fi
 
 # Determine ollama/remote mode once before parsing args
 if ! command -v ollama >/dev/null 2>&1; then
@@ -488,41 +326,105 @@ elif ! ollama list >/dev/null 2>&1; then
     fi
 fi
 
-# Dispatch
-run_with_commits() {
-    [ "$debug" = true ] && printf 'Debug: Running with commits...%s : %s\n' "$1" "$TARGET"
+# # -------------------------------------------------------------------
+# # Subcommand Implementations
+# # -------------------------------------------------------------------
 
-    run_func=$1
-
-    # Validation for --current and --staged
-    if [ "$TARGET" = "--current" ]; then
-        if ! git diff --quiet -- .; then
-            eval "$run_func" "$TARGET"
-        else
-            printf 'No changes in the working tree to process.\n' >&2
-            exit 1
-        fi
-    elif [ "$TARGET" = "--cached" ]; then
-        if ! git diff --cached --quiet -- .; then
-            eval "$run_func" "$TARGET"
-        else
-            printf 'No staged changes to process.\n' >&2
-            exit 1
-        fi
-    # If TARGET is a single commit, run once
-    elif git rev-parse --verify "$TARGET" >/dev/null 2>&1 && [ "$(git rev-list --count $TARGET 2>/dev/null)" -eq 1 ]; then
-        eval "$run_func" "$TARGET"
-    # If TARGET is a range or multi-commit, loop through each commit
+# Portable mktemp: fallback if mktemp not available
+portable_mktemp() {
+    if command -v mktemp >/dev/null 2>&1; then
+        mktemp
     else
-        for commit in $(git rev-list --reverse "$TARGET"); do
-            eval "$run_func" "$commit"
+        # fallback: random filename in TMPDIR or /tmp
+        TMP="${TMPDIR-/tmp}"
+        echo "${TMP}/tmp.$$.$RANDOM"
+    fi
+}
+
+summarize_target() {
+    target="$1"
+    prompt_template="$2"
+    summaries_file="$3"
+
+    [ "${debug:-false}" = "true" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
+
+    if [ "${target}" = "--current" ] || [ "${target}" = "--cached" ] || [ -z "${target}" ]; then
+        summarize_commit "${target}" "${prompt_template}" >>"${summaries_file}"
+        printf '\n\n' >>"${summaries_file}"
+    elif git rev-parse --verify "$target" >/dev/null 2>&1 && [ "$(git rev-list --count "$target")" = "1" ]; then
+        summarize_commit "${target}" "${prompt_template}" >>"${summaries_file}"
+        printf '\n\n' >>"${summaries_file}"
+    else
+        git rev-list --reverse "$target" | while IFS= read -r commit; do
+            summarize_commit "${commit}" "${prompt_template}" >>"${summaries_file}"
+            printf '\n\n' >>"${summaries_file}"
         done
     fi
 }
 
-run_message_with_commit() {
-    [ "$debug" = "true" ] && printf 'Generating commit message for %s...\n' "$1"
+summarize_commit() {
+    commit="$1"
+    prompt_template="$2"
+    hist=$(portable_mktemp)
+    pr=$(portable_mktemp)
+
+    [ "${debug:-false}" = "true" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "${commit}" "${hist}" "${pr}" >&2
+
+    build_history "$hist" "$commit" "$todo_pattern"
+
+    printf '%s\n\n<<GIT_HISTORY>>\n' "$prompt_template" >"$pr"
+    cat "$hist" >>"$pr"
+    printf '<<GIT_HISTORY>>' >>"$pr"
+
+    res=$(generate_response "$pr")
+
+    rm -f "$hist" "$pr"
+    printf '%s\n' "$res"
+}
+
+generate_from_summaries() {
+    header="$1"
+    summaries_file="$2"
+    outfile="$3"
+    pr=$(portable_mktemp)
+
+    echo "DEBUG: generate_from_summaries header='$header', summaries='$summaries_file', output='$outfile'" >&2
+
+    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
+    cat "$summaries_file" >>"$pr"
+    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
+
+    res=$(generate_response "$pr")
+    rm -f "$pr"
+
+    if [ "${dry_run:-false}" != "true" ]; then
+        printf '%s\n' "$res" >"$outfile"
+        printf 'Document written to %s\n' "$outfile"
+    else
+        printf '%s\n' "$res"
+        printf 'Dry run: would write to %s\n' "$outfile"
+    fi
+}
+
+cmd_message() {
+    [ "${debug}" = "true" ] && printf 'Generating commit message for %s...\n' "$1"
     commit_id="$1"
+
+    if [ -z "$commit_id" ]; then
+        printf 'Error: No commit ID or range specified for message generation.\n' >&2
+        exit 1
+    elif [ "$commit_id" != "--current" ] && [ "$commit_id" != "--cached" ]; then
+        #printf 'Error: Invalid commit ID or range specified: %s\n' "$commit_id" >&2
+
+        # Get the message for a specific commit
+        if ! git rev-parse --verify "$commit_id" >/dev/null 2>&1; then
+            printf 'Error: Invalid commit ID: %s\n' "$commit_id" >&2
+            exit 1
+        fi
+        git log -1 --pretty=%B "$commit_id"
+        exit 0
+    fi
+
     hist=$(mktemp)
     build_history "$hist" "$commit_id" "$todo_pattern"
     pr=$(mktemp)
@@ -530,7 +432,7 @@ run_message_with_commit() {
     cat "$hist" >>"$pr"
     printf '<<GIT_HISTORY>>' >>"$pr"
 
-    [ "$debug" = true ] && printf 'Debug: Generated prompt file %s\n' "$pr"
+    [ "${debug}" = true ] && printf 'Debug: Generated prompt file %s\n' "$pr"
 
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"
@@ -538,79 +440,50 @@ run_message_with_commit() {
         [ "$dry_run" = false ] && printf '%s' "$res" >"$output_file"
         printf 'Message written to %s\n' "$output_file"
     else printf '%s\n' "$res"; fi
-
 }
 
-run_summary_with_commit() {
-    commit_id="$1"
-    hist=$(mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
-    pr=$(mktemp)
-    printf '%s\n\n<<GIT_HISTORY>>\n' "$summary_prompt" >"$pr"
-    cat "$hist" >>"$pr"
-    printf '<<GIT_HISTORY>>' >>"$pr"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    if [ -n "$output_file" ]; then
-        [ "$dry_run" = false ] && printf '%s' "$res" >"$output_file"
-        printf 'Summary written to %s\n' "$output_file"
-    else printf '%s\n' "$res"; fi
-}
+cmd_summary() {
+    prompt="${default_summary_prompt}"
+    summaries_file=$(portable_mktemp)
+    summarize_target "${TARGET}" "${prompt}" "${summaries_file}"
 
-run_changelog_with_commit() {
-    commit_id="$1"
-    hist=$(mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
-    pr=$(mktemp)
-    version=$(get_current_version)
-    header="Write a changelog for version $version from the following git history."
-    generate_prompt_file "$pr" 'changelog.tpl' "$header" "$hist"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    out=${output_file:-$changelog_file}
-    if [ "$update_mode" != 'none' ]; then
-        [ "$dry_run" = false ] && update_changelog "$out" "$res" "$version" "$update_mode"
+    ## TODO: Generate a summary from the summaries file
+    # generate_from_summaries "Generate a detailed summary from this list of change summaries." "${summaries_file}" "${output_file:-$changelog_file}"
+
+    if [ -n "${output_file}" ]; then
+        if [ "${dry_run:-false}" != "true" ]; then
+            cat "${summaries_file}" >"${output_file}"
+        fi
+        printf 'Summary written to %s\n' "${output_file}"
+    else
+        cat "${summaries_file}"
     fi
-    printf 'Changelog updated in %s\n' "$out"
 }
 
-run_release_notes_with_commit() {
-    commit_id="$1"
-    hist=$(mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
-    pr=$(mktemp)
+cmd_release_notes() {
     version=$(get_current_version)
-    header="Write release notes for version $version from the following git history."
-    generate_prompt_file "$pr" 'release.tpl' "$header" "$hist"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    out=${output_file:-$release_file}
-    if [ "$update_mode" != 'none' ]; then [ "$dry_run" = false ] && printf '%s\n' "$res" >>"$out"; fi
-    printf 'Release notes updated in %s\n' "$out"
+    prompt="Write release notes for version $version based on these summaries:"
+    summaries_file=$(summarize_target "$TARGET" "$prompt")
+    generate_from_summaries "Release notes for version $version" "$summaries_file" "${output_file:-$release_file}"
+    rm -f "$summaries_file"
 }
 
-run_announce_with_commit() {
-    commit_id="$1"
-    hist=$(mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
-    pr=$(mktemp)
-    header="Write a blog-style announcement for version $(get_current_version) from the following git history."
-    generate_prompt_file "$pr" 'announce.tpl' "$header" "$hist"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    out=${output_file:-$announce_file}
-    [ "$dry_run" = false ] && printf '%s\n' "$res" >"$out"
-    printf 'Announcement written to %s\n' "$out"
+cmd_announce() {
+    version=$(get_current_version)
+    prompt="Write a blog-style announcement for version $version from these commit summaries:"
+    summaries_file=$(summarize_target "$TARGET" "$prompt")
+    generate_from_summaries "Announcement for version $version" "$summaries_file" "${output_file:-$announce_file}"
+    rm -f "$summaries_file"
 }
 
-case ${subcmd} in
-update) run_update ;;
-available-releases) run_available_releases ;;
-help) show_help ;;
-message) run_with_commits run_message_with_commit ;;
-summary) create_summary_file ;;
-release-notes) run_with_summaries run_release_notes_with_summaries ;;
-announce) run_with_summaries run_announce_with_summaries ;;
-changelog) run_with_commits run_changelog_with_commit ;;
+parse_args "$@"
+
+# Dispatch logic
+case "${subcmd}" in
+summary) cmd_summary ;;
+release-notes) cmd_release_notes ;;
+announce) cmd_announce ;;
+message) cmd_message "${TARGET}" ;;
+changelog) cmd_changelog ;;
 *) show_help ;;
 esac
