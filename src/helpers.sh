@@ -1,5 +1,5 @@
 # Show all available release tags
-run_available_releases() {
+get_available_releases() {
     curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[] | .tag_name'
     exit 0
 }

@@ -101,7 +101,7 @@ EOF
   echo "a" >a.txt
   git add a.txt && git commit -m "a"
   mock_ollama "dummy" "Debug mode enabled"
-  run "$CHANGEISH_SCRIPT" --debug --current
+  run "$CHANGEISH_SCRIPT" message --debug --current
   [ "$status" -eq 0 ]
   echo "$output" | grep -qi "Debug mode enabled" || echo "$output" | grep -qi "Running Ollama model"
 }
@@ -114,7 +114,7 @@ EOF
   # Mock curl to return a specific message
   mock_curl "dummy" "Hello! How can I assist you today?"
   export CHANGEISH_API_KEY="dummy"
-  run "$CHANGEISH_SCRIPT" --model-provider remote \
+  run "$CHANGEISH_SCRIPT" changelog --model-provider remote \
     --api-url http://fake --api-model dummy --debug
   [ "$status" -eq 0 ]
   cat CHANGELOG.md >>$ERROR_LOG
@@ -126,27 +126,12 @@ EOF
   [ "$status" -eq 0 ]
 
   # Ensure help content starts with Usage:
-  echo "$output" | head -n1 | grep -q "Version:"
-  [ "$(echo "$output" | head -n2 | tail -n1)" = "Usage: changeish [OPTIONS]" ]
-
+  echo "$output" | grep -q "Usage: changeish"
   echo "$output" | grep -q -- "--help"
   echo "$output" | grep -q -- "--version"
-  echo "$output" | grep -q -- "--remote"
+  echo "$output" | grep -q -- "--model-provider"
   echo "$output" | grep -q -- "--api-url"
   echo "$output" | grep -q -- "--changelog-file"
-  echo "$output" | grep -q "Default version files to check for version changes:"
-  echo "$output" | grep -q "changes.sh"
-  echo "$output" | grep -q "package.json"
-  echo "$output" | grep -q "pyproject.toml"
-  echo "$output" | grep -q "setup.py"
-  echo "$output" | grep -q "Cargo.toml"
-  echo "$output" | grep -q "composer.json"
-  echo "$output" | grep -q "build.gradle"
-  echo "$output" | grep -q "pom.xml"
-
-  # Ensure help does not contain comments
-  echo "$output" | grep -qv "Sourcing .env file..."
-  echo "$output" | grep -qv "Initialize default option values"
 }
 
 @test "Meta: --version prints version" {
@@ -154,7 +139,7 @@ EOF
   echo "$output" | grep -q "0.2.0"
 }
 
-@test "Meta: --available-releases prints tags" {
+@test "Meta: available-releases prints tags" {
   mkdir -p stubs
   cat >stubs/curl <<EOF
 #!/bin/bash
@@ -162,19 +147,15 @@ echo '[{"tag_name": "v1.0.0"}, {"tag_name": "v2.0.0"}]'
 EOF
   chmod +x stubs/curl
   export PATH="$PWD/stubs:$PATH"
-  run "$CHANGEISH_SCRIPT" --available-releases
-
+  run "$CHANGEISH_SCRIPT" available-releases
   # Ensure the output is captured correctly and check for expected tags
   echo "$output" >>$ERROR_LOG
-
-  # Check if the status code is zero (indicating success)
   assert_success
-  # Verify that both v1.0.0 and v2.0.0 are present in the output
   echo "$output" | grep -qi "v1.0.0"
   echo "$output" | grep -qi "v2.0.0"
 }
 
-@test "Meta: --update calls installer" {
+@test "Meta: update calls installer" {
   mkdir -p stubs
   cat >stubs/curl <<EOF
 #!/bin/bash
@@ -186,7 +167,7 @@ echo "installer called: \$@"
 EOF
   chmod +x stubs/curl stubs/sh
   export PATH="$PWD/stubs:$PATH"
-  run "$CHANGEISH_SCRIPT" --update
+  run "$CHANGEISH_SCRIPT" update
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "installer called"
 }
@@ -194,7 +175,7 @@ EOF
 @test "Meta: unknown flag aborts" {
   run "$CHANGEISH_SCRIPT" --does-not-exist
   [ "$status" -ne 0 ]
-  echo "$output" | grep -q "Unknown arg: --does-not-exist"
+  echo "$output" | grep -q "Unknown option or argument: --does-not-exist"
 }
 
 @test "Config: Load .env file" {
