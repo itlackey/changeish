@@ -463,7 +463,8 @@ cmd_summary() {
 cmd_release_notes() {
     version=$(get_current_version)
     prompt="Write release notes for version $version based on these summaries:"
-    summaries_file=$(summarize_target "$TARGET" "$prompt")
+    summaries_file=$(portable_mktemp)
+    summarize_target "$TARGET" "$prompt" "$summaries_file"
     generate_from_summaries "Release notes for version $version" "$summaries_file" "${output_file:-$release_file}"
     rm -f "$summaries_file"
 }
@@ -471,7 +472,8 @@ cmd_release_notes() {
 cmd_announce() {
     version=$(get_current_version)
     prompt="Write a blog-style announcement for version $version from these commit summaries:"
-    summaries_file=$(summarize_target "$TARGET" "$prompt")
+    summaries_file=$(portable_mktemp)
+    summarize_target "$TARGET" "$prompt" "$summaries_file"
     generate_from_summaries "Announcement for version $version" "$summaries_file" "${output_file:-$announce_file}"
     rm -f "$summaries_file"
 }
