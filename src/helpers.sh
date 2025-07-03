@@ -39,7 +39,7 @@ parse_args() {
     subcmd=""
     debug=false
     dry_run=false
-debug="1"
+    debug="1"
     # Preserve original arguments for later parsing
     set -- "$@"
 
@@ -276,6 +276,7 @@ get_available_releases() {
 
 # Extract version string from a line (preserving v if present)
 parse_version() {
+    printf 'Parsing version from: %s\n' "$1" >&2
     # Accepts a string, returns version like v1.2.3 or 1.2.3
     out=$(echo "$1" | sed -n -E 's/.*([vV][0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
     if [ -z "$out" ]; then
@@ -384,11 +385,13 @@ extract_todo_changes() {
 build_history() {
     hist=$1
     commit=$2
-    todo_pattern="${3:-${CHANGEISH_TODO_PATTERN}:-"TODO"}"
-
-    [ "$debug" = true ] && printf 'Debug: Building history for commit %s\n' "$commit"
+    todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-"TODO"}}"
+    debug="1"
+    [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit"
 
     : >"$hist"
+    printf '**Message:** %s\n' "$(git log -1 --pretty=%B "${commit}^!")" >>"$hist"
+
     # Version detection logic
     found_version_file=""
     if [ -n "$version_file" ] && [ -f "$version_file" ]; then
@@ -401,35 +404,24 @@ build_history() {
             }
         done
     fi
-    [ "$debug" = true ] && printf 'Debug: Found version file: %s\n' "$found_version_file"
+    [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$found_version_file"
 
     version_info=""
-    version_diff=""
     if [ -n "$found_version_file" ]; then
-        # Try to get version diff for this commit
-        if [ "$commit" = "--cached" ]; then
-            version_diff=$(git --no-pager diff --cached --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no -- "$found_version_file" | grep -Ei '^[+].*version' || true)
-        elif [ "$commit" = "--current" ] || [ -z "$commit" ]; then
-            version_diff=$(git --no-pager diff --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no -- "${found_version_file}" | grep -Ei '^[+].*version' || true)
-        else
-            version_diff=$(git --no-pager diff $commit^! --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no -- "$found_version_file" | grep -Ei '^[+].*version' || true)
-        fi
-        if [ -n "$version_diff" ]; then
-            parsed_version=$(parse_version "$version_diff")
-            version_info="**Version:** $parsed_version (updated)"
-        else
-            current_file_version=$(get_current_version_from_file "$found_version_file")
-            if [ -n "$current_file_version" ]; then
-                version_info="**Version:** $current_file_version (current)"
-            fi
+        # Extract version directly from the file at the specified commit
+        current_file_version=$(git show "${commit}:${found_version_file}" | grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?')
+        parsed_version=$(parse_version "$current_file_version")
+        if [ -n "$parsed_version" ]; then
+            version_info="**Version:** $parsed_version"
         fi
     fi
 
-    [ "$debug" = true ] && printf 'Debug: Found version info: %s\n' "$version_diff"
 
     if [ -n "$version_info" ]; then
+    [ -n "$debug" ] && printf 'Debug: Found version info: %s\n' "$version_info"
         printf '%s\n' "$version_info" >>"$hist"
     fi
+
     # Determine range for git diff
     git_args="--no-pager diff"
     if [ "$commit" = "--cached" ]; then
@@ -437,22 +429,25 @@ build_history() {
     elif [ "$commit" = "--current" ] || [ -z "$commit" ]; then
         : # working tree diff
     else
-        git_args="$git_args $commit^!"
+        git_args="$git_args $commit"
     fi
     git_args="$git_args --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
     if [ -n "$PATTERN" ]; then
         git_args="$git_args -- $PATTERN"
     fi
 
-    [ "$debug" = true ] && printf 'Debug: Running git command: git %s\n' "$git_args"
+    [ -n "$debug" ] && printf 'Debug: Running git command: git %s\n' "$git_args"
 
     printf '```diff\n' >>"$hist"
     eval git "$git_args" >>"$hist"
     printf '\n```' >>"$hist"
+
     # Append TODO section
     td=$(extract_todo_changes "$commit" "$todo_pattern")
-    [ "$debug" = true ] && printf 'Debug: TODO changes extracted: %s\n' "$td"
-    [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
+    [ -n "$debug" ] && printf 'Debug: TODO changes extracted: %s\n' "$td"
+    if [ -n "$td" ]; then
+        printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
+    fi
 
     # Return 0 in case todo changes are empty
     return 0
