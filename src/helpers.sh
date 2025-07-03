@@ -9,12 +9,9 @@ todo_pattern='*todo*'
 version_file=''
 
 # Subcommand & templates
-template_name=''
 subcmd=''
-
-# Prompts
-commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
-default_summary_prompt='Task: Provide a human-readable summary of the changes described in the following git diff. The summary should be no more than five sentences long. Output only the summary text.'
+update_mode='auto'
+section_name='auto'
 
 # Model settings
 model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
@@ -22,13 +19,6 @@ model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
 api_model=${CHANGEISH_API_MODEL:-}
 api_url=${CHANGEISH_API_URL:-}
 api_key=${CHANGEISH_API_KEY:-}
-
-# Changelog & release defaults
-changelog_file='CHANGELOG.md'
-release_file='RELEASE_NOTES.md'
-announce_file='ANNOUNCEMENT.md'
-update_mode='auto'
-section_name='auto'
 
 is_valid_git_range() {
     git rev-list "$1" >/dev/null 2>&1
@@ -51,9 +41,8 @@ get_script_dir() {
 # Parse global flags and detect subcommand/target/pattern
 parse_args() {
     subcmd=""
-    debug=false
-    dry_run=false
-    debug="1"
+    debug=""
+    dry_run=""
     # Preserve original arguments for later parsing
     set -- "$@"
 
@@ -346,6 +335,54 @@ json_escape() {
         awk 'BEGIN{printf "\""} {printf "%s", $0} END{print "\""}'
 }
 
+extract_content() {
+  # Usage: extract_content "$json_string"
+  json=$1
+
+  # 1) pull out the raw, escaped value of "content":
+  raw=$(printf '%s' "$json" | awk '
+  {
+    text = $0
+    # find the start of "content"
+    idx = index(text, "\"content\"")
+    if (idx == 0) exit
+
+    # jump to after "content"
+    after = substr(text, idx + length("\"content\""))
+    # find the colon
+    colon = index(after, ":")
+    if (colon == 0) exit
+    after = substr(after, colon + 1)
+    # strip leading whitespace
+    sub(/^[[:space:]]*/, "", after)
+
+    # must start with a double-quote
+    if (substr(after,1,1) != "\"") exit
+    s = substr(after,2)    # drop that opening "
+
+    val = ""
+    esc = 0
+    # accumulate until an unescaped quote
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s,i,1)
+      if (c == "\\" && esc == 0) {
+        esc = 1
+        val = val c
+      } else if (c == "\"" && esc == 0) {
+        break
+      } else {
+        esc = 0
+        val = val c
+      }
+    }
+    print val
+  }')
+
+  # 2) interpret backslash-escapes (\n, \", \\) into real characters:
+  printf '%b' "$raw"
+}
+
+
 generate_remote() {
     content=$(cat "$1")
 
@@ -355,20 +392,23 @@ generate_remote() {
     body=$(printf '{"model":"%s","messages":[{"role":"user","content":%s}],"max_completion_tokens":8192}' \
         "${api_model}" "${escaped_content}")
 
-    #[ "${debug}" = "true" ] && printf 'Request body:\n%s\n' "${body}" >&2
 
     response=$(curl -s -X POST "${api_url}" \
         -H "Authorization: Bearer ${api_key}" \
         -H "Content-Type: application/json" \
         -d "${body}")
 
-    # if [ "${debug}" = "true" ]; then
-    #     echo "Response from remote API:" >&2
-    #     echo "${response}" >&2
-    # fi
 
-    # Extract "content" value using grep/sed to allow line breaks and special characters
-    result=$(echo "${response}" | sed -n 's/.*"content"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | sed 's/\\n/\n/g; s/\\"/"/g; s/\\\\/\\/g')
+    if [ -n "${debug}" ]; then
+        echo "Response from remote API:" >&2
+        echo "${response}" >&2
+        #echo "${response}" >> "response.json"
+    fi
+
+    # Extract the content field from the response
+    result=$(extract_content "${response}")
+
+    [ -n "$debug" ] && printf 'Debug: Parsed response:\n%s\n' "$result" >&2
     echo "${result}"
 }
 
@@ -381,7 +421,7 @@ run_local() {
 }
 
 generate_response() {
-    [ "$debug" = true ] && printf 'Debug: Generating response using %s model...\n' "$model_provider"
+    [ "$debug" = true ] && printf 'Debug: Generating response using %s model...\n' "$model_provider" >&2
     case ${model_provider} in
     remote) generate_remote "$1" ;;
     none) cat "$1" ;;
@@ -410,7 +450,6 @@ build_history() {
     hist=$1
     commit=$2
     todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-"TODO"}}"
-    debug="1"
     [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit"
 
     : >"$hist"

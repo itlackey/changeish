@@ -44,33 +44,15 @@ PROMPT_DIR="$SCRIPT_DIR/prompts"
 . "$SCRIPT_DIR/helpers.sh"
 
 
-# TARGET=""
-# PATTERN=""
+# Prompts
+template_name=''
+commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
+default_summary_prompt='Task: Provide a human-readable summary of the changes described in the following git diff. The summary should be no more than five sentences long. Output only the summary text.'
 
-# debug=""
-# dry_run=""
-# template_dir="$PROMPT_DIR"
-# output_file=''
-# todo_pattern='*todo*'
-# version_file=''
-
-# # Subcommand & templates
-# template_name=''
-# subcmd=''
-
-# # Model settings
-# model=${CHANGEISH_MODEL:-'qwen2.5-coder'}
-# model_provider=${CHANGEISH_MODEL_PROVIDER:-'auto'}
-# api_model=${CHANGEISH_API_MODEL:-}
-# api_url=${CHANGEISH_API_URL:-}
-# api_key=${CHANGEISH_API_KEY:-}
-
-# # Changelog & release defaults
-# changelog_file='CHANGELOG.md'
-# release_file='RELEASE_NOTES.md'
-# announce_file='ANNOUNCEMENT.md'
-# update_mode='auto'
-# section_name='auto'
+# Changelog & release defaults
+changelog_file='CHANGELOG.md'
+release_file='RELEASE_NOTES.md'
+announce_file='ANNOUNCEMENT.md'
 
 
 # -------------------------------------------------------------------
@@ -207,13 +189,14 @@ generate_from_summaries() {
     summaries_file="$2"
     outfile="$3"
     pr=$(portable_mktemp)
-    [ -n "$debug" ] && echo "DEBUG: generate_from_summaries header='$header', summaries='$summaries_file', output='$outfile'" >&2
+    [ -n "$debug" ] && echo "DEBUG: generate_from_summaries header='$header', summaries='$summaries_file', output='$outfile', dry_run='$dry_run'" >&2
     printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
     cat "$summaries_file" >>"$pr"
     printf '<<COMMIT_SUMMARIES>>' >>"$pr"
     res=$(generate_response "$pr")
+    [ -n "$debug" ] && printf 'Debug: Generated response: %s\n' "$res"
     rm -f "$pr"
-    if [ -z "$dry_run" ]; then
+    if [ "${dry_run}" = "true" ]; then
         printf '%s\n' "$res" >"$outfile"
         printf 'Document written to %s\n' "$outfile"
     else
@@ -292,8 +275,9 @@ cmd_announce() {
     version=$(get_current_version)
     prompt="Write a blog-style announcement for version $version from these commit summaries:"
     summaries_file=$(portable_mktemp)
-    summarize_target "$TARGET" "$prompt" "$summaries_file"
-    generate_from_summaries "Announcement for version $version" "$summaries_file" "${output_file:-$announce_file}"
+    summarize_target "${TARGET}" "${prompt}" "${summaries_file}"
+    generate_from_summaries "Announcement for version ${version}" "${summaries_file}" "${output_file:-$announce_file}"
+    cat "${summaries_file}"
     rm -f "$summaries_file"
 }
 
