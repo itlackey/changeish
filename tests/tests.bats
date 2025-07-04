@@ -44,7 +44,9 @@ mock_ollama() {
   mkdir -p bin
   cat >bin/ollama <<EOF
 #!/bin/bash
-cat \$1
+echo "Ollama command: \$1"
+echo "Using model: \$2"
+echo "Ollama run complete"
 EOF
   chmod +x bin/ollama
   export PATH="$PWD/bin:$PATH"
@@ -262,14 +264,14 @@ gen_commits() {
   assert_success
   assert_output --partial "relnote"
 }
-# ---- ANNOUNCE SUBCOMMAND ----
+# ---- ANNOUNCEMENT SUBCOMMAND ----
 
-@test "Announce for HEAD" {
+@test "Announcement for HEAD" {
   echo "announce" >an.txt && git add an.txt && git commit -m "an"
   mock_ollama "dummy" "- announce"
-  run "$CHANGEISH_SCRIPT" announce HEAD
+  run "$CHANGEISH_SCRIPT" announcement HEAD
   assert_success
-  grep -q "announce" ANNOUNCE.md
+  grep -q "announce" ANNOUNCEMENT.md
 }
 
 # ---- AVAILABLE-RELEASES & UPDATE ----
@@ -309,7 +311,16 @@ EOF
   assert_success
   assert_output --partial "phi"
 }
+@test "Config defaults to PWD/.env" {
+  echo "CHANGEISH_MODEL=llama3" >.env
+  
+  mock_ollama "dummy" "- llama3"
 
+  run "$CHANGEISH_SCRIPT" message HEAD
+  assert_success
+  assert_output --partial "run complete"
+  assert_output --partial "Using model: llama3"
+}
 @test "Config file overrides .env" {
   echo "CHANGEISH_MODEL=llama3" >.env
   echo "CHANGEISH_MODEL=phi3" >my.env

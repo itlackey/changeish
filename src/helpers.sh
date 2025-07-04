@@ -23,7 +23,6 @@ api_url=${CHANGEISH_API_URL:-}
 api_key=${CHANGEISH_API_KEY:-}
 
 
-
 is_valid_git_range() {
     git rev-list "$1" >/dev/null 2>&1
 }
@@ -90,7 +89,7 @@ parse_args() {
         show_version
         exit 0
         ;;
-    message | summary | changelog | release-notes | announce | available-releases | update)
+    message | summary | changelog | release-notes | announcement | available-releases | update)
         subcmd=$1
         shift
         ;;
@@ -105,7 +104,7 @@ parse_args() {
     set -- "$@"
 
     # Early config file parsing (handle both --config-file and --config-file=)
-    config_file=""
+    config_file="${PWD}/.env"
     i=1
     while [ $i -le $# ]; do
         eval "arg=\${$i}"
@@ -274,29 +273,33 @@ parse_args() {
     done
 
     # Determine ollama/remote mode once before parsing args
-    if ! command -v ollama >/dev/null 2>&1; then
-        [ -n "${debug}" ] && printf 'ollama not found, forcing remote mode (local model unavailable).\n'
-        model_provider="remote"
-        if [ -z "$api_key" ]; then
-            printf 'Error: ollama not found, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
-            model_provider="none"
-        fi
-        if [ -z "$api_url" ]; then
-            printf 'Error: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
-            model_provider="none"
-        fi
-    elif ! ollama list >/dev/null 2>&1; then
-        [ -n "$debug" ] && printf 'ollama daemon not running, forcing remote mode (local model unavailable).\n'
-        model_provider="remote"
-        if [ -z "$api_key" ]; then
-            printf 'Error: ollama daemon not running, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
-            model_provider="none"
-        fi
-        if [ -z "$api_url" ]; then
-            printf 'Error: ollama daemon not running, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
-            model_provider="none"
+    if [ "${model_provider}" = "auto" ] || [ "${model_provider}" = "local" ]; then
+        if ! command -v ollama >/dev/null 2>&1; then
+            [ -n "${debug}" ] && printf 'Debug: ollama not found, forcing remote mode (local model unavailable).\n'
+            model_provider="remote"
+            if [ -z "${api_key}" ]; then
+                [ -n "${debug}" ] && printf 'Warning: ollama not found, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+                model_provider="none"
+            fi
+            if [ -z "${api_url}" ]; then
+                [ -n "${debug}" ] && printf 'Warning: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+                model_provider="none"
+            fi
+        # elif ! ollama list >/dev/null 2>&1; then
+        #     [ -n "$debug" ] && printf 'ollama daemon not running, forcing remote mode (local model unavailable).\n'
+        #     model_provider="remote"
+        #     if [ -z "$api_key" ]; then
+        #         [ -n "${debug}" ] && printf 'Warning: ollama daemon not running, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
+        #         model_provider="none"
+        #     fi
+        #     if [ -z "$api_url" ]; then
+        #         [ -n "${debug}" ] && printf 'Warning: ollama daemon not running, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+        #         model_provider="none"
+        #     fi
         fi
     fi
+
+    [ "${model_provider}" = "none" ] && printf 'Warning: Model provider set to "none", no model will be used.\n' >&2
 
     if [ "$debug" = true ]; then
         echo "Parsed options:"
@@ -494,6 +497,7 @@ extract_todo_changes() {
 # helper: writes message header based on commit type
 get_message_header() {
     commit="$1"
+    [ -n "$debug" ] && printf 'Debug: Getting message header for commit %s\n' "$commit" >&2
     case "$commit" in
     --cached) echo "Staged Changes" ;;
     --current | "") echo "Current Changes" ;;
@@ -503,28 +507,36 @@ get_message_header() {
 
 # helper: finds the version file path
 find_version_file() {
-    if [ -n "$version_file" ] && [ -f "$version_file" ]; then
-        echo "$version_file"
+    [ -n "${debug}" ] && printf 'Debug: Finding version file...\n' >&2
+    if [ -n "${version_file}" ] && [ -f "${version_file}" ]; then
+        echo "${version_file}"
         return
     fi
 
     for vf in package.json pyproject.toml setup.py \
         Cargo.toml composer.json build.gradle pom.xml; do
-        [ -f "$vf" ] && {
-            echo "$vf"
+        [ -f "${vf}" ] && {
+            echo "${vf}"
             return
         }
     done
 
+    [ -n "${debug}" ] && printf 'Debug: No version file found, searching for changes.sh...\n' >&2
+
     changes_sh=$(git ls-files --full-name | grep '/changes\.sh$' | head -n1)
-    [ -z "$changes_sh" ] && [ -f "changes.sh" ] && changes_sh="changes.sh"
-    [ -n "$changes_sh" ] && echo "$changes_sh"
+    # Fallback: handle the case where "changes.sh" is in the root directory
+    if [ -n "${changes_sh}" ]; then
+        echo "${changes_sh}"
+    fi
+    [ -n "${changes_sh}" ] && echo "${changes_sh}"
+    [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
 }
 
 # helper: extract version text from a file or git index/commit
 get_version_info() {
     commit="$1"
     vf="$2"
+    [ -n "$debug" ] && printf 'Debug: Getting version info for commit %s from file %s\n' "$commit" "$vf" >&2
     case "$commit" in
     --current | "")
         [ -f "$vf" ] && grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
@@ -560,6 +572,7 @@ build_diff() {
     --current | "") ;;
     *) args+=("${commit}^!") ;;
     esac
+    [ -n "$debug" ] && printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
     args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
     [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
 
@@ -596,7 +609,7 @@ build_history() {
 
     # version
     vf=$(find_version_file)
-    [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
+    [ -n "$vf" ] && [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
     [ -n "$vf" ] && {
         ver=$(get_version_info "$commit" "$vf")
         [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"

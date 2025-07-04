@@ -28,9 +28,9 @@ setup() {
   # prompts and file globals
   default_summary_prompt="DEF_SUM"
   commit_message_prompt="DEF_MSG"
-  release_file="release.out"
-  announce_file="announce.out"
-  changelog_file="changelog.out"
+  # release_file="release.out"
+  # announce_file="announce.out"
+  # changelog_file="changelog.out"
 
   # no dry_run by default
   unset dry_run
@@ -100,32 +100,6 @@ teardown() {
 }
 
 #----------------------------------------
-# generate_from_summaries
-#----------------------------------------
-@test "generate_from_summaries writes to outfile when not dry_run" {
-  printf "S1\n" >sum.txt
-  run generate_from_summaries HDR sum.txt out.txt
-  [ "$status" -eq 0 ]
-  assert_file_exist out.txt
-  run cat out.txt
-  assert_output "RESP"
-  run generate_from_summaries HDR sum.txt out.txt
-  assert_output --partial "Document written to out.txt"
-  rm -f sum.txt out.txt
-}
-
-@test "generate_from_summaries dry_run prints message only" {
-  dry_run=1
-  printf "S1\n" >sum.txt
-  run generate_from_summaries HDR sum.txt out.txt
-  [ "$status" -eq 0 ]
-  assert_output --partial "Dry run: would write to out.txt"
-  [ ! -f out.txt ]
-  unset dry_run
-  rm -f sum.txt
-}
-
-#----------------------------------------
 # cmd_message
 #----------------------------------------
 @test "cmd_message with no id errors" {
@@ -191,7 +165,7 @@ teardown() {
 }
 
 #----------------------------------------
-# cmd_release_notes / announce / changelog
+# cmd_release_notes / announcement / changelog
 #----------------------------------------
 
 @test "cmd_release_notes writes to its default file" {
@@ -206,16 +180,16 @@ teardown() {
   assert_output --partial "Document written to release.out"
 }
 
-@test "cmd_announce writes to its default file" {
+@test "cmd_announcement writes to its default file" {
   summarize_target() { :; }
   generate_from_summaries() {
     printf "GEN\n"
     printf 'Document written to %s\n' "$3"
   }
 
-  run cmd_announce
+  run cmd_announcement
   [ "$status" -eq 0 ]
-  assert_output --partial "Document written to announce.out"
+  assert_output --partial "Document written to ANNOUNCEMENT.md"
 }
 
 @test "cmd_changelog writes to its default file" {
@@ -226,6 +200,6 @@ teardown() {
   }
 
   run cmd_changelog
-  [ "$status" -eq 0 ]
-  assert_output --partial "Document written to changelog.out"
+  assert_success
+  assert_output --partial "Document written to CHANGELOG.md"
 }

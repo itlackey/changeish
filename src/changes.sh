@@ -126,11 +126,6 @@ Examples:
 EOF
 }
 
-# Enable debug mode if requested
-if [ -n "${debug}" ]; then
-    set -x
-fi
-
 # # -------------------------------------------------------------------
 # # Subcommand Implementations
 # # -------------------------------------------------------------------
@@ -202,7 +197,7 @@ cmd_release_notes() {
     rm -f "${tmp_prompt_file}"
 }
 
-cmd_announce() {
+cmd_announcement() {
     summaries_file=$(portable_mktemp)
     summarize_target "${TARGET}" "${summaries_file}"
     prompt_file_name="${PROMPT_DIR}/announcement_prompt.md"
@@ -231,11 +226,16 @@ cmd_changelog() {
 if [ "${_is_sourced}" -eq 0 ]; then
     parse_args "$@"
 
+    # # Enable debug mode if requested
+    # if [ -n "${debug}" ]; then
+    #     set -x
+    # fi
+
     # Dispatch logic
     case "${subcmd}" in
     summary) cmd_summary ;;
     release-notes) cmd_release_notes ;;
-    announce) cmd_announce ;;
+    announcement) cmd_announcement ;;
     message) cmd_message "${TARGET}" ;;
     changelog) cmd_changelog ;;
     help)
