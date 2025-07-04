@@ -276,7 +276,7 @@ cmd_announce() {
 }
 
 cmd_changelog() {
-    # version=$(get_current_version)
+    version=$(get_current_version)
     # prompt="Write a changelog for version $version based on these summaries:"
     summaries_file=$(portable_mktemp)
     summarize_target "$TARGET" "${summaries_file}"
