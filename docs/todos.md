@@ -5,7 +5,7 @@
 - CHORE: write doc on using external APIs
 - CHORE: Add examples of using changeish with various workflows. ie. npm run changeish
 - ADDED: --summary option to provide summary of changes
-- ENHANCEMENT: --type "annoucement" option to generate a release announcement
+- ADDED: --type "annoucement" option to generate a release announcement
 - ADDED: --type "commit" option to generate commit message `git commit -m "$(changeish -t commit)"
 - ENHANCEMENT: add git config user.name to output
 
