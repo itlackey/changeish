@@ -88,3 +88,103 @@ EOF
     assert_success
     assert_equal "$output" ""
 }
+
+
+@test "get_version_info detects version from current file" {
+    echo "version = '1.2.3'" >"$TMPFILE"
+    run get_version_info "--current" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info detects version from cached file" {
+    echo "version = '1.2.3'" >"$TMPFILE"
+    git add "$TMPFILE"
+    run get_version_info "--cached" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info detects version from specific commit" {
+    echo "version = '1.2.3'" >"$TMPFILE"
+    git add "$TMPFILE"
+    git commit -m "Add version file"
+    commit_hash=$(git rev-parse HEAD)
+    run get_version_info "$commit_hash" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info detects version with v-prefix" {
+    echo "version = 'v1.2.3'" >"$TMPFILE"
+    run get_version_info "--current" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "v1.2.3"
+}
+
+@test "get_version_info returns empty string if no version found" {
+    echo "No version here" >"$TMPFILE"
+    run get_version_info "--current" "$TMPFILE"
+    assert_success
+    assert_equal "$output" ""
+}
+
+@test "get_version_info handles missing file gracefully" {
+    run get_version_info "--current" "nonexistent_file.txt"
+    assert_success
+    assert_equal "$output" ""
+}
+
+@test "get_version_info detects version from JSON file" {
+    echo '{"version": "1.2.3"}' >"$TMPFILE"
+    run get_version_info "--current" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info detects version from cached JSON file" {
+    echo '{"version": "1.2.3"}' >"$TMPFILE"
+    git add "$TMPFILE"
+    run get_version_info "--cached" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info detects version from specific commit JSON file" {
+    echo '{"version": "1.2.3"}' >"$TMPFILE"
+    git add "$TMPFILE"
+    git commit -m "Add JSON version file"
+    commit_hash=$(git rev-parse HEAD)
+    run get_version_info "$commit_hash" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info handles multiple version strings and picks the first one" {
+    cat >"$TMPFILE" <<EOF
+version = '1.2.3'
+version = '2.3.4'
+EOF
+    run get_version_info "--current" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
+
+@test "get_version_info handles invalid commit gracefully" {
+    run get_version_info "invalid_commit_hash" "$TMPFILE"
+    assert_success
+    assert_equal "$output" ""
+}
+
+@test "get_version_info detects version from file in specific commit with multiple versions" {
+    cat >"$TMPFILE" <<EOF
+version = '1.2.3'
+version = '2.3.4'
+EOF
+    git add "$TMPFILE"
+    git commit -m "Add multiple versions"
+    commit_hash=$(git rev-parse HEAD)
+    run get_version_info "$commit_hash" "$TMPFILE"
+    assert_success
+    assert_equal "$output" "1.2.3"
+}
