@@ -22,6 +22,8 @@ api_model=${CHANGEISH_API_MODEL:-}
 api_url=${CHANGEISH_API_URL:-}
 api_key=${CHANGEISH_API_KEY:-}
 
+
+
 is_valid_git_range() {
     git rev-list "$1" >/dev/null 2>&1
 }
@@ -40,6 +42,33 @@ get_script_dir() {
     esac
     printf '%s\n' "$dir"
 }
+
+# Portable mktemp: fallback if mktemp not available
+portable_mktemp() {
+    if command -v mktemp >/dev/null 2>&1; then
+        mktemp
+    else
+        TMP="${TMPDIR-/tmp}"
+        # Use date +%s and $$ for uniqueness
+        echo "$TMP/tmp.$$.$(date +%s)"
+    fi
+}
+
+build_prompt() {
+    prompt_file="$1"
+    diff_file="$2"
+
+    # Concatenate the prompt template and diff file content
+    result="$(
+        cat "${prompt_file}"
+        echo
+        cat "${diff_file}"
+    )"
+
+    # Return the result as a multiline string
+    printf "%s\n" "${result}"
+}
+
 # Parse global flags and detect subcommand/target/pattern
 parse_args() {
     subcmd=""
@@ -291,12 +320,6 @@ parse_args() {
     fi
 }
 
-# Show all available release tags
-get_available_releases() {
-    curl -s https://api.github.com/repos/itlackey/changeish/releases | jq -r '.[] | .tag_name'
-    exit 0
-}
-
 # Extract version string from a line (preserving v if present)
 parse_version() {
     #printf 'Parsing version from: %s\n' "$1" >&2
@@ -436,6 +459,19 @@ generate_response() {
     esac
 }
 
+generate_from_prompt() {
+    prompt_file="$1"
+    output_file="$2"
+    [ -n "${debug}" ] && printf 'Generating response from prompt file %s...\n' "${prompt_file}"
+    res=$(generate_response "${prompt_file}")
+    if [ -n "${output_file}" ] && [ "${dry_run}" != "true" ]; then
+        printf '%s' "${res}" >"${output_file}"
+        printf 'Response written to %s\n' "${output_file}"
+    else
+        printf '%s\n' "${res}"
+    fi
+}
+
 # Extract TODO changes for history extraction
 extract_todo_changes() {
     range="$1"
@@ -457,52 +493,56 @@ extract_todo_changes() {
 
 # helper: writes message header based on commit type
 get_message_header() {
-  commit="$1"
-  case "$commit" in
+    commit="$1"
+    case "$commit" in
     --cached) echo "Staged Changes" ;;
-    --current|"" ) echo "Current Changes" ;;
-    * ) git log -1 --pretty=%B "$commit" ;;
-  esac
+    --current | "") echo "Current Changes" ;;
+    *) git log -1 --pretty=%B "$commit" ;;
+    esac
 }
 
 # helper: finds the version file path
 find_version_file() {
-  if [ -n "$version_file" ] && [ -f "$version_file" ]; then
-    echo "$version_file"
-    return
-  fi
+    if [ -n "$version_file" ] && [ -f "$version_file" ]; then
+        echo "$version_file"
+        return
+    fi
 
-  for vf in package.json pyproject.toml setup.py \
-            Cargo.toml composer.json build.gradle pom.xml; do
-    [ -f "$vf" ] && { echo "$vf"; return; }
-  done
+    for vf in package.json pyproject.toml setup.py \
+        Cargo.toml composer.json build.gradle pom.xml; do
+        [ -f "$vf" ] && {
+            echo "$vf"
+            return
+        }
+    done
 
-  changes_sh=$(git ls-files --full-name | grep '/changes\.sh$' | head -n1)
-  [ -z "$changes_sh" ] && [ -f "changes.sh" ] && changes_sh="changes.sh"
-  [ -n "$changes_sh" ] && echo "$changes_sh"
+    changes_sh=$(git ls-files --full-name | grep '/changes\.sh$' | head -n1)
+    [ -z "$changes_sh" ] && [ -f "changes.sh" ] && changes_sh="changes.sh"
+    [ -n "$changes_sh" ] && echo "$changes_sh"
 }
 
 # helper: extract version text from a file or git index/commit
 get_version_info() {
-    commit="$1"; vf="$2"
+    commit="$1"
+    vf="$2"
     case "$commit" in
-        --current|"")
-            [ -f "$vf" ] && grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
-            ;;
-        --cached)
-            if git ls-files --cached --error-unmatch "$vf" >/dev/null 2>&1; then
-                git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
-            elif [ -f "$vf" ]; then
-                grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
-            fi
-            ;;
-        *)
-            if git ls-tree -r --name-only "$commit" | grep -Fxq "$vf"; then
-                git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
-            elif [ -f "$vf" ]; then
-                grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
-            fi
-            ;;
+    --current | "")
+        [ -f "$vf" ] && grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+        ;;
+    --cached)
+        if git ls-files --cached --error-unmatch "$vf" >/dev/null 2>&1; then
+            git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
+        elif [ -f "$vf" ]; then
+            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+        fi
+        ;;
+    *)
+        if git ls-tree -r --name-only "$commit" | grep -Fxq "$vf"; then
+            git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
+        elif [ -f "$vf" ]; then
+            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+        fi
+        ;;
     esac | {
         read -r raw
         parse_version "$raw"
@@ -511,72 +551,112 @@ get_version_info() {
 
 # helper: builds main diff output (tracked + optional untracked)
 build_diff() {
-  commit="$1"; diff_pattern="$2"; debug="$3"
-  args=(--no-pager diff)
-  case "$commit" in
+    commit="$1"
+    diff_pattern="$2"
+    debug="$3"
+    args=(--no-pager diff)
+    case "$commit" in
     --cached) args+=(--cached) ;;
-    --current|"") ;;
+    --current | "") ;;
     *) args+=("${commit}^!") ;;
-  esac
-  args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
-  [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
+    esac
+    args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
+    [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
 
-  [ "$debug" = true ] && printf 'Debug: git %s\n' "${args[*]}" >&2
-  diff_output="$(git "${args[@]}")"
+    [ "$debug" = true ] && printf 'Debug: git %s\n' "${args[*]}" >&2
+    diff_output="$(git "${args[@]}")"
 
-  # handle untracked files
-  untracked=$(git ls-files --others --exclude-standard)
-  IFS=$'\n'
-  for f in $untracked; do
-    [ ! -f "$f" ] && continue
-    [ -n "$diff_pattern" ] && case "$f" in $diff_pattern) ;; *) continue ;; esac
-    extra=$(git --no-pager diff --no-prefix --unified=0 --no-color -b -w --minimal --compact-summary --color-moved=no --no-index /dev/null "$f" 2>/dev/null || true)
-    diff_output="${diff_output}${diff_output:+\n}${extra}"
-  done
-  IFS=' '
+    # handle untracked files
+    untracked=$(git ls-files --others --exclude-standard)
+    IFS=$'\n'
+    for f in $untracked; do
+        [ ! -f "$f" ] && continue
+        [ -n "$diff_pattern" ] && case "$f" in $diff_pattern) ;; *) continue ;; esac
+        extra=$(git --no-pager diff --no-prefix --unified=0 --no-color -b -w --minimal --compact-summary --color-moved=no --no-index /dev/null "$f" 2>/dev/null || true)
+        diff_output="${diff_output}${diff_output:+\n}${extra}"
+    done
+    IFS=' '
 
-  printf '%s\n' "$diff_output"
+    printf '%s\n' "$diff_output"
 }
 
 # top-level refactored build_history
 build_history() {
-  hist="$1"; commit="$2"
-  todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-TODO}}"
-  diff_pattern="${4:-}"
+    hist="$1"
+    commit="$2"
+    todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-TODO}}"
+    diff_pattern="${4:-}"
 
-  [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
-  : >"$hist"
+    [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
+    : >"$hist"
 
-  # header
-  msg=$(get_message_header "$commit")
-  printf '**Message:** %s\n' "$msg" >>"$hist"
+    # header
+    msg=$(get_message_header "$commit")
+    printf '**Message:** %s\n' "$msg" >>"$hist"
 
-  # version
-  vf=$(find_version_file)
-  [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
-  [ -n "$vf" ] && {
-    ver=$(get_version_info "$commit" "$vf")
-    [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"
-  }
+    # version
+    vf=$(find_version_file)
+    [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
+    [ -n "$vf" ] && {
+        ver=$(get_version_info "$commit" "$vf")
+        [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"
+    }
 
-  # diff
-  diff_out=$(build_diff "$commit" "$diff_pattern" "$debug")
-  printf '```diff\n%s\n```\n' "$diff_out" >>"$hist"
+    # diff
+    diff_out=$(build_diff "$commit" "$diff_pattern" "$debug")
+    printf '```diff\n%s\n```\n' "$diff_out" >>"$hist"
 
-  # TODO diff
-  td=$(extract_todo_changes "$commit" "$todo_pattern")
-  [ -n "$debug" ] && printf 'Debug: TODO changes: %s\n' "$td" >&2
-  [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
+    # TODO diff
+    td=$(extract_todo_changes "$commit" "$todo_pattern")
+    [ -n "$debug" ] && printf 'Debug: TODO changes: %s\n' "$td" >&2
+    [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
 
-  return 0
+    return 0
 }
 
+summarize_target() {
+    target="$1"
+    summaries_file="$2"
+    [ -n "$debug" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
+
+    # If no target is specified, summarize the current commit or staged changes
+    if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
+        summarize_commit "$target" "$summaries_file"
+        printf '\n\n' >>"$summaries_file"
+    # Single commit
+    elif git rev-parse --verify "$target" >/dev/null 2>&1 && [ "$(git rev-list --count "$target")" = "1" ]; then
+        summarize_commit "$target" "$summaries_file"
+        printf '\n\n' >>"$summaries_file"
+    else
+        # Handle commit ranges
+        git rev-list --reverse "$target" | while IFS= read -r commit; do
+            summarize_commit "$commit" "$summaries_file"
+            printf '\n\n' >>"$summaries_file"
+        done
+    fi
+}
+
+summarize_commit() {
+    commit="$1"
+    out_file="$2"
+    hist=$(portable_mktemp)
+    pr=$(portable_mktemp)
+    [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
+    build_history "$hist" "$commit" "$todo_pattern" "$PATTERN"
+    summary_template=$(build_prompt "${PROMPT_DIR}/summary_prompt.md" "$hist")
+    #[ -n "$debug" ] && printf 'Debug: Using summary prompt: %s\n' "$summary_template"
+    printf '%s\n' "$summary_template" >"$pr"
+    res=$(generate_response "$pr")
+    rm -f "$hist" "$pr"
+    printf '%s\n' "$res" >>"$out_file"
+}
 
 # Remove duplicate blank lines and ensure file ends with newline
 remove_duplicate_blank_lines() {
     # $1: file path
     awk 'NR==1{print} NR>1{if (!($0=="" && p=="")) print} {p=$0} END{if(p!="")print ""}' "$1" >"$1.tmp" && mv "$1.tmp" "$1"
 }
+
 extract_changelog_section() {
     ecs_section="$1"
     ecs_file="$2"

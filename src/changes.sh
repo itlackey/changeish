@@ -56,14 +56,26 @@ announce_file='ANNOUNCEMENT.md'
 show_version() {
     printf '%s\n' "${__VERSION}"
 }
-# Update the script to latest release
+# Show all available release tags
+get_available_releases() {
+    curl -s https://api.github.com/repos/itlackey/changeish/releases | awk -F'"' '/"tag_name":/ {print $4}'
+    exit 0
+}
+# Update the script to a specific release version (or latest if not specified)
 run_update() {
-    latest_version=$(curl -s https://api.github.com/repos/itlackey/changeish/releases/latest | awk -F'"' '/"tag_name":/ {print $4; exit}')
-    printf 'Updating changeish to version %s...\n' "${latest_version}"
-    curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh
+    version="${1:-latest}"
+    if [ "$version" = "latest" ]; then
+        latest_version=$(get_available_releases | head -n 1)
+        printf 'Updating changeish to version %s...\n' "${latest_version}"
+        curl -fsSL https://raw.githubusercontent.com/itlackey/changeish/main/install.sh | sh -- --version "${latest_version}"
+    else
+        printf 'Updating changeish to version %s...\n' "${version}"
+        curl -fsSL "https://raw.githubusercontent.com/itlackey/changeish/main/install.sh" | sh -- --version "${version}"
+    fi
     printf 'Update complete.\n'
     exit 0
 }
+
 show_help() {
     cat <<EOF
 Usage: changeish <subcommand> [target] [pattern] [OPTIONS]
@@ -84,6 +96,8 @@ AI/Model Options:
       --model-provider M  auto, local, remote, none
       --api-model MODEL   Remote API model
       --api-url URL       Remote API URL
+
+Output Options:
       --update-mode MODE  Changelog update mode (auto, prepend, append, update, none)
       --section-name NAME Changelog section name
 
@@ -120,84 +134,6 @@ fi
 # # -------------------------------------------------------------------
 # # Subcommand Implementations
 # # -------------------------------------------------------------------
-
-# Portable mktemp: fallback if mktemp not available
-portable_mktemp() {
-    if command -v mktemp >/dev/null 2>&1; then
-        mktemp
-    else
-        TMP="${TMPDIR-/tmp}"
-        # Use date +%s and $$ for uniqueness
-        echo "$TMP/tmp.$$.$(date +%s)"
-    fi
-}
-
-summarize_target() {
-    target="$1"
-    summaries_file="$2"
-    [ -n "$debug" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
-    if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
-        summarize_commit "$target" "$summaries_file"
-        printf '\n\n' >>"$summaries_file"
-    elif git rev-parse --verify "$target" >/dev/null 2>&1 && [ "$(git rev-list --count "$target")" = "1" ]; then
-        summarize_commit "$target" "$summaries_file"
-        printf '\n\n' >>"$summaries_file"
-    else
-        git rev-list --reverse "$target" | while IFS= read -r commit; do
-            summarize_commit "$commit" "$summaries_file"
-            printf '\n\n' >>"$summaries_file"
-        done
-    fi
-}
-
-summarize_commit() {
-    commit="$1"
-    out_file="$2"
-    hist=$(portable_mktemp)
-    pr=$(portable_mktemp)
-    [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
-    build_history "$hist" "$commit" "$todo_pattern" "$PATTERN"
-    summary_template=$(build_prompt "${PROMPT_DIR}/summary_prompt.md" "$hist")
-    [ -n "$debug" ] && printf 'Debug: Using summary prompt: %s\n' "$summary_template"
-    printf '%s\n' "$summary_template" >"$pr"
-    res=$(generate_response "$pr")
-    rm -f "$hist" "$pr"
-    printf '%s\n' "$res" >>"$out_file"
-}
-
-generate_from_summaries() {
-    header="$1"
-    summaries_file="$2"
-    outfile="$3"
-    pr=$(portable_mktemp)
-    [ -n "$debug" ] && echo "DEBUG: generate_from_summaries header='$header', summaries='$summaries_file', output='$outfile', dry_run='$dry_run'" >&2
-    printf '%s\n\n<<COMMIT_SUMMARIES>>\n' "$header" >"$pr"
-    cat "$summaries_file" >>"$pr"
-    printf '<<COMMIT_SUMMARIES>>' >>"$pr"
-    res=$(generate_response "$pr")
-    [ -n "$debug" ] && printf 'Debug: Generated response: %s\n' "$res"
-    rm -f "$pr"
-    if [ "${dry_run}" = "true" ]; then
-        printf '%s\n' "$res" >"$outfile"
-        printf 'Document written to %s\n' "$outfile"
-    else
-        printf '%s\n' "$res"
-        printf 'Dry run: would write to %s\n' "$outfile"
-    fi
-}
-
-generate_from_prompt(){
-    prompt_file="$1"
-    output_file="$2"
-    [ -n "${debug}" ] && printf 'Generating response from prompt file %s...\n' "${prompt_file}"
-    res=$(generate_response "${prompt_file}")
-    if [ -n "${output_file}" ] && [ "${dry_run}" != "true" ]; then
-        printf '%s' "${res}" >"${output_file}"
-        printf 'Response written to %s\n' "${output_file}"
-    else
-        printf '%s\n' "${res}"
-    fi
-}
 
 cmd_message() {
     commit_id="${1:-"--current"}"
@@ -241,16 +177,18 @@ cmd_message() {
 
 cmd_summary() {
     summaries_file=$(portable_mktemp)
-    summarize_target "$TARGET" "$summaries_file"
-    if [ -n "$output_file" ]; then
-        if [ -z "$dry_run" ]; then
-            cat "$summaries_file" >"$output_file"
+    summarize_target "${TARGET}" "${summaries_file}"
+    if [ -n "${output_file}" ]; then
+        if [ "${dry_run}" != "true" ]; then
+            cp "${summaries_file}" "${output_file}"
+            printf 'Summary written to %s\n' "${output_file}"
+        else
+            cat "${summaries_file}"
         fi
-        printf 'Summary written to %s\n' "$output_file"
     else
-        cat "$summaries_file"
+        cat "${summaries_file}"
     fi
-    rm -f "$summaries_file"
+    rm -f "${summaries_file}"
 }
 
 cmd_release_notes() {
@@ -276,28 +214,19 @@ cmd_announce() {
 }
 
 cmd_changelog() {
-    version=$(get_current_version)
     # prompt="Write a changelog for version $version based on these summaries:"
     summaries_file=$(portable_mktemp)
     summarize_target "$TARGET" "${summaries_file}"
-    generate_from_summaries "Changelog for version $version" "${summaries_file}" "${output_file:-$changelog_file}"
-    rm -f "$summaries_file"
+    prompt_file_name="${PROMPT_DIR}/changelog_prompt.md"
+    tmp_prompt_file=$(portable_mktemp)
+    build_prompt "${prompt_file_name}" "${summaries_file}" > "${tmp_prompt_file}"
+
+    # TODO: add support for --update-mode
+    generate_from_prompt "${tmp_prompt_file}" "${output_file:-${changelog_file}}"
+    rm -f "${summaries_file}"
+    rm -f "${tmp_prompt_file}"
 }
 
-get_current_version() {
-    printf '%s\n' "$__VERSION"
-}
-
-build_prompt() {
-    prompt_file="$1"
-    diff_file="$2"
-
-    # Concatenate the prompt template and diff file content
-    result="$(cat "${prompt_file}"; echo; cat "${diff_file}")"
-
-    # Return the result as a multiline string
-    printf "%s\n" "${result}"
-}
 
 if [ "${_is_sourced}" -eq 0 ]; then
     parse_args "$@"
@@ -317,7 +246,7 @@ if [ "${_is_sourced}" -eq 0 ]; then
         get_available_releases
         ;;
     update)
-        run_update
+        run_update "latest"
         ;;
     *) cmd_message "${TARGET}" ;;
     esac

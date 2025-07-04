@@ -75,7 +75,7 @@ teardown() {
 #----------------------------------------
 # summarize_target
 #----------------------------------------
-@test "summarize_target on single‐commit range" {
+@test "summarize_target on single-commit range" {
   tmp="$(mktemp)"
   # override summarize_commit to echo commit into file
   summarize_commit() { printf "C:%s\n" "$1" >>"$3"; }
@@ -164,9 +164,20 @@ teardown() {
 #----------------------------------------
 @test "cmd_summary prints to stdout" {
   summarize_target() { echo "SUM"; }
-  run cmd_summary
+  run cmd_summary --dry-run
   [ "$status" -eq 0 ]
   assert_output "SUM"
+}
+
+@test "cmd_summary HEAD~1 prints to stdout" {
+ 
+  #summarize_target() { echo "SUM"; }
+  ollama(){
+    echo "SUM"
+  }
+  run cmd_summary HEAD~1 --dry-run
+  [ "$status" -eq 0 ]
+  assert_output --partial "SUM"
 }
 
 @test "cmd_summary writes to file when output_file set" {
