@@ -455,179 +455,108 @@ extract_todo_changes() {
     printf '%s' "${td}"
 }
 
-# Build git history markdown (with version info)
-build_history() {
-    hist="$1"
-    commit="$2"
-    todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-"TODO"}}"
-    diff_pattern="${4:-}"
-
-    [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit"
-    : >"$hist"
-
-    # Write header
-    if [ "$commit" = "--cached" ]; then
-        printf '**Message:** Staged Changes\n' >>"$hist"
-    elif [ "$commit" = "--current" ] || [ -z "$commit" ]; then
-        printf '**Message:** Current Changes\n' >>"$hist"
-    else
-        printf '**Message:** %s\n' "$(git log -1 --pretty=%B "${commit}")" >>"$hist"
-    fi
-
-    # Find version file: first $version_file, else common candidates, else changes.sh anywhere
-    found_version_file=""
-    if [ -n "$version_file" ] && [ -f "$version_file" ]; then
-        found_version_file="$version_file"
-    else
-        for vf in package.json pyproject.toml setup.py Cargo.toml composer.json build.gradle pom.xml; do
-            [ -f "$vf" ] && {
-                found_version_file="$vf"
-                break
-            }
-        done
-        # Try to find changes.sh anywhere if not found yet
-        if [ -z "$found_version_file" ]; then
-            changes_sh_path=$(git ls-files --full-name | grep '/changes\.sh$' | head -n1)
-            if [ -z "$changes_sh_path" ]; then
-                # Check at root as well
-                [ -f "changes.sh" ] && changes_sh_path="changes.sh"
-            fi
-            [ -n "$changes_sh_path" ] && found_version_file="$changes_sh_path"
-        fi
-    fi
-    [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$found_version_file"
-
-    # Parse version info
-    version_info=""
-    if [ -n "$found_version_file" ]; then
-        case "$commit" in
-        --current | "")
-            if [ -f "$found_version_file" ]; then
-                current_file_version=$(grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$found_version_file" | head -n1)
-                parsed_version=$(parse_version "$current_file_version")
-                [ -n "$parsed_version" ] && version_info="**Version:** $parsed_version"
-            fi
-            ;;
-        --cached)
-            if git ls-files --error-unmatch "$found_version_file" >/dev/null 2>&1; then
-                current_file_version=$(git show ":$found_version_file" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
-                parsed_version=$(parse_version "$current_file_version")
-                [ -n "$parsed_version" ] && version_info="**Version:** $parsed_version"
-            fi
-            ;;
-        *)
-            if git ls-tree "$commit" -- "$found_version_file" | grep -q .; then
-                current_file_version=$(git show "${commit}:${found_version_file}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1)
-                parsed_version=$(parse_version "$current_file_version")
-                [ -n "$parsed_version" ] && version_info="**Version:** $parsed_version"
-            fi
-            ;;
-        esac
-    fi
-    [ -n "$version_info" ] && printf '%s\n' "$version_info" >>"$hist"
-    # Prepare positional args for git diff
-    set -- --no-pager diff
-
-    # Handle commit spec
-    case "$commit" in
-    --cached)
-        set -- "$@" --cached
-        ;;
-    --current | "")
-        # working tree vs HEAD — no extra flag
-        ;;
-    *)
-        set -- "$@" "${commit}^!"
-        ;;
-    esac
-
-    # Common diff options
-    set -- "$@" \
-        --minimal \
-        --no-prefix \
-        --unified=0 \
-        --no-color \
-        -b \
-        -w \
-        --compact-summary \
-        --color-moved=no
-
-    # Restrict to a pattern if given
-    if [ -n "$diff_pattern" ]; then
-        set -- "$@" -- "$diff_pattern"
-    fi
-
-    # Debug print
-    if [ "$debug" = true ]; then
-        printf 'Debug: Running git command: git %s\n' "$*"
-    fi
-
-    # Run tracked diff
-    diff_output=$(git "$@")
-
-    # -------------------------------
-    # Now include any new (untracked) files
-    # -------------------------------
-    # List untracked files
-    untracked_files=$(git ls-files --others --exclude-standard)
-
-    [ "${debug}" = "1" ] && printf 'Debug: Untracked files found: %s\n' "$untracked_files"
-    OLD_IFS=$IFS
-    IFS=$'\n'  # Use newline as delimiter for safer parsing
-    for f in ${untracked_files}; do
-        if [ ! -f "$f" ]; then
-            [ "${debug}" = "1" ] && printf 'Debug: Skipping non-file: %s\n' "$f"
-            continue
-        fi
-
-        # (optional) skip if not matching the diff_pattern glob
-        if [ -n "$diff_pattern" ]; then
-            case "$f" in
-            $diff_pattern) ;;
-            *) continue ;;
-            esac
-        fi
-
-        if [ "${debug}" = "1" ]; then
-            printf 'Debug: Including untracked file in diff: %s\n' "$f"
-        fi
-
-        # produce a diff of "/dev/null" → new file
-        extra_diff=$(
-            git --no-pager diff \
-                --no-prefix \
-                --unified=0 \
-                --no-color \
-                -b \
-                -w \
-                --minimal \
-                --compact-summary \
-                --color-moved=no \
-                --no-index /dev/null "${f}" || true
-        )
-
-        printf 'Debug: Extra diff for untracked file %s:\n%s\n' "${f}" "${extra_diff}"
-
-        # append it (preserving leading newline)
-        diff_output="${diff_output}${diff_output:+
-}${extra_diff}"
-    done
-    IFS=$OLD_IFS  # Restore original IFS
-
-    # write to history
-    printf '```diff\n' >>"$hist"
-    printf '%s\n' "$diff_output" >>"$hist"
-    printf '\n```\n' >>"$hist"
-
-    # TODO diff
-    td=$(extract_todo_changes "$commit" "$todo_pattern")
-    [ -n "$debug" ] && printf 'Debug: TODO changes extracted: %s\n' "$td"
-    if [ -n "$td" ]; then
-        printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
-    fi
-
-    return 0
+# helper: writes message header based on commit type
+get_message_header() {
+  commit="$1"
+  case "$commit" in
+    --cached) echo "Staged Changes" ;;
+    --current|"" ) echo "Current Changes" ;;
+    * ) git log -1 --pretty=%B "$commit" ;;
+  esac
 }
+
+# helper: finds the version file path
+find_version_file() {
+  if [ -n "$version_file" ] && [ -f "$version_file" ]; then
+    echo "$version_file"
+    return
+  fi
+
+  for vf in package.json pyproject.toml setup.py \
+            Cargo.toml composer.json build.gradle pom.xml; do
+    [ -f "$vf" ] && { echo "$vf"; return; }
+  done
+
+  changes_sh=$(git ls-files --full-name | grep '/changes\.sh$' | head -n1)
+  [ -z "$changes_sh" ] && [ -f "changes.sh" ] && changes_sh="changes.sh"
+  [ -n "$changes_sh" ] && echo "$changes_sh"
+}
+
+# helper: extract version text from a file or git index/commit
+get_version_info() {
+  commit="$1"; vf="$2"
+  case "$commit" in
+    --current|"") grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1 ;;
+    --cached) git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 ;;
+    *) git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 ;;
+  esac | {
+    read -r raw
+    parse_version "$raw"
+  }
+}
+
+# helper: builds main diff output (tracked + optional untracked)
+build_diff() {
+  commit="$1"; diff_pattern="$2"; debug="$3"
+  args=(--no-pager diff)
+  case "$commit" in
+    --cached) args+=(--cached) ;;
+    --current|"") ;;
+    *) args+=("${commit}^!") ;;
+  esac
+  args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
+  [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
+
+  [ "$debug" = true ] && printf 'Debug: git %s\n' "${args[*]}" >&2
+  diff_output="$(git "${args[@]}")"
+
+  # handle untracked files
+  untracked=$(git ls-files --others --exclude-standard)
+  IFS=$'\n'
+  for f in $untracked; do
+    [ ! -f "$f" ] && continue
+    [ -n "$diff_pattern" ] && case "$f" in $diff_pattern) ;; *) continue ;; esac
+    extra=$(git --no-pager diff --no-prefix --unified=0 --no-color -b -w --minimal --compact-summary --color-moved=no --no-index /dev/null "$f" 2>/dev/null || true)
+    diff_output="${diff_output}${diff_output:+\n}${extra}"
+  done
+  IFS=' '
+
+  printf '%s\n' "$diff_output"
+}
+
+# top-level refactored build_history
+build_history() {
+  hist="$1"; commit="$2"
+  todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-TODO}}"
+  diff_pattern="${4:-}"
+
+  [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
+  : >"$hist"
+
+  # header
+  msg=$(get_message_header "$commit")
+  printf '**Message:** %s\n' "$msg" >>"$hist"
+
+  # version
+  vf=$(find_version_file)
+  [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
+  [ -n "$vf" ] && {
+    ver=$(get_version_info "$commit" "$vf")
+    [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"
+  }
+
+  # diff
+  diff_out=$(build_diff "$commit" "$diff_pattern" "$debug")
+  printf '```diff\n%s\n```\n' "$diff_out" >>"$hist"
+
+  # TODO diff
+  td=$(extract_todo_changes "$commit" "$todo_pattern")
+  [ -n "$debug" ] && printf 'Debug: TODO changes: %s\n' "$td" >&2
+  [ -n "$td" ] && printf '\n### TODO Changes\n```diff\n%s\n```\n' "$td" >>"$hist"
+
+  return 0
+}
+
 
 # Remove duplicate blank lines and ensure file ends with newline
 remove_duplicate_blank_lines() {

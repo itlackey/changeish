@@ -13,6 +13,13 @@ setup() {
     cd "$REPO"
     git init -q
 
+    git config user.name "Test"
+    git config user.email "test@example.com"
+    touch changes.sh
+    echo 'Version: 0.1.0' >package.json
+    git add changes.sh package.json
+    git commit -m "Initial commit"
+
     # Commit version 1.0.0
     printf '{ "version": "1.0.0" }\n' >package.json
     git add package.json
@@ -136,7 +143,6 @@ teardown() {
 
 }
 
-
 @test "build_history includes untracked files" {
 
     printf '{ "version": "1.2.0" }\n' >package.json
@@ -150,4 +156,85 @@ teardown() {
     run grep -F 'untracked.txt' "$hist"
     assert_success
 
+}
+
+@test "get_message_header with --cached returns 'Staged Changes'" {
+    run get_message_header --cached
+    assert_success
+    assert_output "Staged Changes"
+}
+
+@test "get_message_header with --current returns 'Current Changes'" {
+    run get_message_header --current
+    assert_success
+    assert_output "Current Changes"
+}
+
+@test "get_message_header with empty string returns 'Current Changes'" {
+    run get_message_header ""
+    assert_success
+    assert_output "Current Changes"
+}
+
+@test "get_message_header with commit hash returns commit message" {
+    commit=$(git rev-parse HEAD)
+    run get_message_header "$commit"
+    assert_success
+    assert_output "Bump to 1.1.0"
+}
+
+@test "find_version_file finds package.json" {
+    run find_version_file
+    assert_success
+    assert_output "package.json"
+}
+
+@test "get_version_info for --current extracts version from file" {
+    run get_version_info --current package.json
+    assert_success
+    assert_output --partial "1.1.0"
+}
+
+@test "get_version_info for --cached extracts version from index" {
+    echo "Version: 2.0.0" >package.json
+    git add package.json
+    run get_version_info --cached package.json
+    assert_success
+    assert_output --partial "2.0.0"
+}
+
+@test "get_version_info for commit extracts version" {
+    echo "Version: 3.1.4" >package.json
+    git add package.json
+    git commit -m "Update version"
+    commit=$(git rev-parse HEAD)
+    run get_version_info "$commit" package.json
+    assert_success
+    assert_output --partial "3.1.4"
+}
+
+@test "build_diff outputs minimal diff with tracked change" {
+    echo "new line" >>changes.sh
+    git add changes.sh
+    run build_diff --cached "" false
+    assert_success
+    assert_output --partial "changes.sh"
+}
+
+@test "build_diff includes untracked file content" {
+    echo "untracked content" >newfile.txt
+    run build_diff --current "" false
+    assert_success
+    assert_output --partial "newfile.txt"
+    assert_output --partial "+untracked content"
+}
+
+@test "build_history creates expected output" {
+    export debug=false
+    run build_history history.txt --cached
+    assert_success
+    assert [ -f "history.txt" ]
+    assert $(grep -q "**Message:** Staged Changes" "history.txt")
+    assert $(grep -q "\`\`\`diff" "history.txt")
+    assert $(grep -q "**Version:**" "history.txt")
 }
