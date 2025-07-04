@@ -484,15 +484,29 @@ find_version_file() {
 
 # helper: extract version text from a file or git index/commit
 get_version_info() {
-  commit="$1"; vf="$2"
-  case "$commit" in
-    --current|"") grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1 ;;
-    --cached) git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 ;;
-    *) git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 ;;
-  esac | {
-    read -r raw
-    parse_version "$raw"
-  }
+    commit="$1"; vf="$2"
+    case "$commit" in
+        --current|"")
+            [ -f "$vf" ] && grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+            ;;
+        --cached)
+            if git ls-files --cached --error-unmatch "$vf" >/dev/null 2>&1; then
+                git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
+            elif [ -f "$vf" ]; then
+                grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+            fi
+            ;;
+        *)
+            if git ls-tree -r --name-only "$commit" | grep -Fxq "$vf"; then
+                git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
+            elif [ -f "$vf" ]; then
+                grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+            fi
+            ;;
+    esac | {
+        read -r raw
+        parse_version "$raw"
+    }
 }
 
 # helper: builds main diff output (tracked + optional untracked)
