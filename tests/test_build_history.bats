@@ -110,11 +110,28 @@ teardown() {
 @test "build_history respects PATTERN environment variable" {
     # Only include package.json in diff
     export PATTERN="package.json"
-
+    export debug="1"
+    echo $(git --no-pager diff HEAD^! --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no -- "package.json")
+    echo "end of diff"
     hist="$(mktemp)"
-    build_history "$hist" HEAD~1
-
+    build_history "$hist" HEAD "todo" "$PATTERN"
+    cat "$hist"
     # The diff block should reference package.json
-    run grep -F "package.json" "$hist"
-    [ "$status" -eq 0 ]
+    run grep -F '```diff' "$hist"
+    assert_success
+
+    run grep -F 'package.json' "$hist"
+    assert_success
+}
+
+@test "build_history respects no pattern" {
+
+    printf '{ "version": "1.2.0" }\n' >package.json
+    hist="$(mktemp)"
+    build_history "$hist" "--current"
+    assert_success
+    cat "$hist"
+    run grep -F '1.2.0' "$hist"
+    assert_success
+
 }

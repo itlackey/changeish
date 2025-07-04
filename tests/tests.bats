@@ -40,8 +40,8 @@ teardown() {
 #   export PATH="$PWD/bin:$PATH"
 # }
 
-mock_ollama(){
-    mkdir -p bin
+mock_ollama() {
+  mkdir -p bin
   cat >bin/ollama <<EOF
 #!/bin/bash
 cat \$1
@@ -94,7 +94,47 @@ gen_commits() {
 }
 
 # ---- MESSAGE SUBCOMMAND ----
+@test "SCRIPT runs successfully with specified options" {
+  # # Set up environment variables and options
+  # export DEBUG=true
+  # export SUBCOMMAND="message"
+  # export TARGET="--current"
+  # export PATTERN=""
+  # export TEMPLATE_DIR="/Users/itlackey/code/github/changeish/src/prompts"
+  # export CONFIG_LOADED=true
+  # export OUTPUT_FILE=""
+  # export TODO_PATTERN="*todo*"
+  # export VERSION_FILE=""
+  # export MODEL="qwen2.5-coder"
+  # export MODEL_PROVIDER="remote"
+  # export API_MODEL="gpt-4o-mini"
+  # export API_URL="https://i2db-chat-sandboxaizehuif2whye3c.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-04-01-preview"
+  # export UPDATE_MODE="auto"
+  # export SECTION_NAME="auto"
 
+  export CONFIG_FILE="$BATS_TEST_DIRNAME/../.env"
+  # Run the script with the specified options
+  run "$CHANGEISH_SCRIPT" "message" --config-file "${CONFIG_FILE}" --verbose
+
+  echo "Output: $output"
+  # Assert that the script ran successfully
+  assert_success
+
+  # Validate the parsed options
+  assert_output --partial "Debug: true"
+  assert_output --partial "Subcommand: message"
+  assert_output --partial "Target: --current"
+  assert_output --partial "Template Directory: /Users/itlackey/code/github/changeish/src/prompts"
+  assert_output --partial "Config File: ../.env"
+  assert_output --partial "Config Loaded: true"
+  assert_output --partial "TODO Pattern: *todo*"
+  assert_output --partial "Model: qwen2.5-coder"
+  assert_output --partial "Model Provider: remote"
+  assert_output --partial "API Model: gpt-4o-mini"
+  assert_output --partial "API URL: https://i2db-chat-sandboxaizehuif2whye3c.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-04-01-preview"
+  assert_output --partial "Update Mode: auto"
+  assert_output --partial "Section Name: auto"
+}
 @test "Generate message for HEAD (default)" {
   echo "msg" >m.txt && git add m.txt && git commit -m "commit for message"
   run "$CHANGEISH_SCRIPT" message HEAD
@@ -103,11 +143,19 @@ gen_commits() {
 }
 
 @test "Generate message for working tree --current" {
-  echo "foo" >wt.txt
   mock_ollama "dummy" "Working Tree changes"
+
+  echo "foo" >"wt.txt"
+  git add .
+  git commit -m "wt commit"
+  echo "updated" >"wt.txt"
+  echo "bar" >"wt2.txt"
+
   run "$CHANGEISH_SCRIPT" message --current --verbose
   assert_success
-  assert_output --partial "Working Tree"
+  assert_output --partial "Current Changes"
+  assert_output --partial "wt.txt"
+  assert_output --partial "wt2.txt"
 }
 
 @test "Message: for commit range" {

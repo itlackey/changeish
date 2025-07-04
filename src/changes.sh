@@ -40,7 +40,7 @@ fi
 SCRIPT_DIR="$(get_script_dir "$_SCRIPT_PATH")"
 PROMPT_DIR="$SCRIPT_DIR/prompts"
 
-# shellcheck source=/dev/null
+# shellcheck source=./src/helpers.sh
 . "$SCRIPT_DIR/helpers.sh"
 
 
@@ -175,7 +175,7 @@ summarize_commit() {
     hist=$(portable_mktemp)
     pr=$(portable_mktemp)
     [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
-    build_history "$hist" "$commit" "$todo_pattern"
+    build_history "$hist" "$commit" "$todo_pattern" "$PATTERN"
     printf '%s\n\n<<GIT_HISTORY>>\n' "$prompt_template" >"$pr"
     cat "$hist" >>"$pr"
     printf '<<GIT_HISTORY>>' >>"$pr"
@@ -233,7 +233,7 @@ cmd_message() {
     fi
 
     hist=$(portable_mktemp)
-    build_history "$hist" "$commit_id" "$todo_pattern"
+    build_history "$hist" "$commit_id" "$todo_pattern" "$PATTERN"
     pr=$(portable_mktemp)
     printf '%s\n\n<<GIT_HISTORY>>\n' "$commit_message_prompt" >"$pr"
     cat "$hist" >>"$pr"

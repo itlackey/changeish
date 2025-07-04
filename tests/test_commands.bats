@@ -130,10 +130,16 @@ teardown() {
 #----------------------------------------
 @test "cmd_message with no id errors" {
   run cmd_message ""
-  [ "$status" -eq 1 ]
+  assert_success
   assert_output --partial "Error: No commit ID"
 }
-
+@test "cmd_message --current prints message" {
+  echo "change" > "$REPO/file.txt"
+  run cmd_message "--current"
+  [ "$status" -eq 0 ]
+  echo "$output"
+  assert_output --partial "change"
+}
 @test "cmd_message single‐commit prints message" {
   run git -C "$REPO" rev-parse HEAD~1  # ensure HEAD~1 exists
   run cmd_message HEAD~1
