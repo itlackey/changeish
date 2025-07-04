@@ -135,3 +135,19 @@ teardown() {
     assert_success
 
 }
+
+
+@test "build_history includes untracked files" {
+
+    printf '{ "version": "1.2.0" }\n' >package.json
+    printf 'untracked file content\n' >untracked.txt
+    hist="$(mktemp)"
+    build_history "$hist" "--current"
+    assert_success
+    cat "$hist"
+    run grep -F '1.2.0' "$hist"
+    assert_success
+    run grep -F 'untracked.txt' "$hist"
+    assert_success
+
+}

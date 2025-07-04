@@ -38,20 +38,15 @@ else
 fi
 
 SCRIPT_DIR="$(get_script_dir "$_SCRIPT_PATH")"
-PROMPT_DIR="$SCRIPT_DIR/prompts"
+PROMPT_DIR="${SCRIPT_DIR}/../prompts"
 
 # shellcheck source=./src/helpers.sh
-. "$SCRIPT_DIR/helpers.sh"
+. "${SCRIPT_DIR}/helpers.sh"
 
-
-# Prompts
-template_name=''
-commit_message_prompt='Task: Provide a concise, commit message for the changes described in the following git diff. Output only the commit message.'
-default_summary_prompt='Task: Provide a human-readable summary of the changes described in the following git diff. The summary should be no more than five sentences long. Output only the summary text.'
 
 # Changelog & release defaults
 changelog_file='CHANGELOG.md'
-release_file='RELEASE_NOTES.md'
+release_notes_file='RELEASE_NOTES.md'
 announce_file='ANNOUNCEMENT.md'
 
 
@@ -117,18 +112,6 @@ Examples:
 EOF
 }
 
-
-
-# Helper: build prompt file with tag and content
-build_prompt_file() {
-    tag="$1"
-    content_file="$2"
-    prompt_file="$3"
-    printf '%s\n\n<<%s>>\n' "$tag" "$tag" >"$prompt_file"
-    cat "$content_file" >>"$prompt_file"
-    printf '<<%s>>' "$tag" >>"$prompt_file"
-}
-
 # Enable debug mode if requested
 if [ -n "${debug}" ]; then
     set -x
@@ -151,18 +134,17 @@ portable_mktemp() {
 
 summarize_target() {
     target="$1"
-    prompt_template="$2"
-    summaries_file="$3"
+    summaries_file="$2"
     [ -n "$debug" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
     if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
-        summarize_commit "$target" "$prompt_template" "$summaries_file"
+        summarize_commit "$target" "$summaries_file"
         printf '\n\n' >>"$summaries_file"
     elif git rev-parse --verify "$target" >/dev/null 2>&1 && [ "$(git rev-list --count "$target")" = "1" ]; then
-        summarize_commit "$target" "$prompt_template" "$summaries_file"
+        summarize_commit "$target" "$summaries_file"
         printf '\n\n' >>"$summaries_file"
     else
         git rev-list --reverse "$target" | while IFS= read -r commit; do
-            summarize_commit "$commit" "$prompt_template" "$summaries_file"
+            summarize_commit "$commit" "$summaries_file"
             printf '\n\n' >>"$summaries_file"
         done
     fi
@@ -170,15 +152,14 @@ summarize_target() {
 
 summarize_commit() {
     commit="$1"
-    prompt_template="$2"
-    out_file="$3"
+    out_file="$2"
     hist=$(portable_mktemp)
     pr=$(portable_mktemp)
     [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
     build_history "$hist" "$commit" "$todo_pattern" "$PATTERN"
-    printf '%s\n\n<<GIT_HISTORY>>\n' "$prompt_template" >"$pr"
-    cat "$hist" >>"$pr"
-    printf '<<GIT_HISTORY>>' >>"$pr"
+    summary_template=$(build_prompt "${PROMPT_DIR}/summary_prompt.md" "$hist")
+    [ -n "$debug" ] && printf 'Debug: Using summary prompt: %s\n' "$summary_template"
+    printf '%s\n' "$summary_template" >"$pr"
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"
     printf '%s\n' "$res" >>"$out_file"
@@ -202,6 +183,19 @@ generate_from_summaries() {
     else
         printf '%s\n' "$res"
         printf 'Dry run: would write to %s\n' "$outfile"
+    fi
+}
+
+generate_from_prompt(){
+    prompt_file="$1"
+    output_file="$2"
+    [ -n "${debug}" ] && printf 'Generating response from prompt file %s...\n' "${prompt_file}"
+    res=$(generate_response "${prompt_file}")
+    if [ -n "${output_file}" ] && [ "${dry_run}" != "true" ]; then
+        printf '%s' "${res}" >"${output_file}"
+        printf 'Response written to %s\n' "${output_file}"
+    else
+        printf '%s\n' "${res}"
     fi
 }
 
@@ -235,9 +229,7 @@ cmd_message() {
     hist=$(portable_mktemp)
     build_history "$hist" "$commit_id" "$todo_pattern" "$PATTERN"
     pr=$(portable_mktemp)
-    printf '%s\n\n<<GIT_HISTORY>>\n' "$commit_message_prompt" >"$pr"
-    cat "$hist" >>"$pr"
-    printf '<<GIT_HISTORY>>' >>"$pr"
+    printf '%s' "$(build_prompt "${PROMPT_DIR}/commit_message_prompt.md" "$hist")" >"$pr"
     [ -n "$debug" ] && printf 'Debug: Generated prompt file %s\n' "$pr"
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"
@@ -248,9 +240,8 @@ cmd_message() {
 }
 
 cmd_summary() {
-    prompt="$default_summary_prompt"
     summaries_file=$(portable_mktemp)
-    summarize_target "$TARGET" "$prompt" "$summaries_file"
+    summarize_target "$TARGET" "$summaries_file"
     if [ -n "$output_file" ]; then
         if [ -z "$dry_run" ]; then
             cat "$summaries_file" >"$output_file"
@@ -263,35 +254,49 @@ cmd_summary() {
 }
 
 cmd_release_notes() {
-    version=$(get_current_version)
-    prompt="Write release notes for version $version based on these summaries:"
     summaries_file=$(portable_mktemp)
-    summarize_target "$TARGET" "$prompt" "$summaries_file"
-    generate_from_summaries "Release notes for version $version" "$summaries_file" "${output_file:-$release_file}"
-    rm -f "$summaries_file"
+    summarize_target "${TARGET}" "${summaries_file}"
+    prompt_file_name="${PROMPT_DIR}/release_notes_prompt.md"
+    tmp_prompt_file=$(portable_mktemp)
+    build_prompt "${prompt_file_name}" "${summaries_file}" > "${tmp_prompt_file}"
+    generate_from_prompt "${tmp_prompt_file}" "${output_file:-${release_notes_file}}"
+    rm -f "${summaries_file}"
+    rm -f "${tmp_prompt_file}"
 }
 
 cmd_announce() {
-    version=$(get_current_version)
-    prompt="Write a blog-style announcement for version $version from these commit summaries:"
     summaries_file=$(portable_mktemp)
-    summarize_target "${TARGET}" "${prompt}" "${summaries_file}"
-    generate_from_summaries "Announcement for version ${version}" "${summaries_file}" "${output_file:-$announce_file}"
-    cat "${summaries_file}"
-    rm -f "$summaries_file"
+    summarize_target "${TARGET}" "${summaries_file}"
+    prompt_file_name="${PROMPT_DIR}/announcement_prompt.md"
+    tmp_prompt_file=$(portable_mktemp)
+    build_prompt "${prompt_file_name}" "${summaries_file}" > "${tmp_prompt_file}"
+    generate_from_prompt "${tmp_prompt_file}" "${output_file:-${announce_file}}"
+    rm -f "${summaries_file}"
+    rm -f "${tmp_prompt_file}"
 }
 
 cmd_changelog() {
-    version=$(get_current_version)
-    prompt="Write a changelog for version $version based on these summaries:"
+    # version=$(get_current_version)
+    # prompt="Write a changelog for version $version based on these summaries:"
     summaries_file=$(portable_mktemp)
-    summarize_target "$TARGET" "$prompt" "$summaries_file"
-    generate_from_summaries "Changelog for version $version" "$summaries_file" "${output_file:-$changelog_file}"
+    summarize_target "$TARGET" "${summaries_file}"
+    generate_from_summaries "Changelog for version $version" "${summaries_file}" "${output_file:-$changelog_file}"
     rm -f "$summaries_file"
 }
 
 get_current_version() {
     printf '%s\n' "$__VERSION"
+}
+
+build_prompt() {
+    prompt_file="$1"
+    diff_file="$2"
+
+    # Concatenate the prompt template and diff file content
+    result="$(cat "${prompt_file}"; echo; cat "${diff_file}")"
+
+    # Return the result as a multiline string
+    printf "%s\n" "${result}"
 }
 
 if [ "${_is_sourced}" -eq 0 ]; then

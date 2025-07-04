@@ -43,8 +43,6 @@ get_script_dir() {
 # Parse global flags and detect subcommand/target/pattern
 parse_args() {
     subcmd=""
-    debug=""
-    dry_run=""
 
     # Restore original arguments for main parsing
     set -- "$@"
@@ -274,6 +272,7 @@ parse_args() {
     if [ "$debug" = true ]; then
         echo "Parsed options:"
         echo "  Debug: $debug"
+        echo "  Dry Run: $dry_run"
         echo "  Subcommand: $subcmd"
         echo "  Target: $TARGET"
         echo "  Pattern: $PATTERN"
@@ -421,15 +420,15 @@ generate_remote() {
 }
 
 run_local() {
-    if [ "$debug" = true ]; then
+    if [ -n "${debug}" ]; then
         ollama run "${model}" --verbose <"$1"
     else
-        ollama run "$model" <"$1"
+        ollama run "${model}" <"$1"
     fi
 }
 
 generate_response() {
-    [ "$debug" = true ] && printf 'Debug: Generating response using %s model...\n' "$model_provider" >&2
+    [ -n "${debug}" ] && printf 'Debug: Generating response using %s model...\n' "${model_provider}" >&2
     case ${model_provider} in
     remote) generate_remote "$1" ;;
     none) cat "$1" ;;
@@ -762,14 +761,4 @@ update_changelog() {
         printf '\n[Managed by changeish](https://github.com/itlackey/changeish)\n\n' >>"$ic_file"
     fi
     remove_duplicate_blank_lines "$ic_file"
-}
-
-generate_prompt_file() {
-    out=$1
-    tpl=$2
-    header=$3
-    hist=$4
-    file_tpl="$template_dir/$tpl"
-    if [ -f "$file_tpl" ]; then cp "$file_tpl" "$out"; else printf '%s\n' "$header" >"$out"; fi
-    printf '\n<<<GIT HISTORY>>>\n%s\n<<<END>>>\n' "$(cat "$hist")" >>"$out"
 }
