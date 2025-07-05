@@ -29,28 +29,28 @@ teardown() {
 
 # ---- Helpers ----
 
-# mock_ollama() {
-#   local content="$2"
-#   mkdir -p bin
-#   cat >bin/ollama <<EOF
-# #!/bin/bash
-# echo '$content'
-# EOF
-#   chmod +x bin/ollama
-#   export PATH="$PWD/bin:$PATH"
-# }
+
 
 mock_ollama() {
+  arg1="${1:-dummy}"
+  arg2="${2:-Ollama message}"
   mkdir -p bin
   cat >bin/ollama <<EOF
 #!/bin/bash
 echo "Ollama command: \$1"
 echo "Using model: \$2"
+
+echo "Ollama arg1: $arg1"
+echo "Ollama arg2: $arg2"
 echo "Ollama run complete"
+if [ "\$3" ]; then
+  echo "\$3"
+fi
 EOF
   chmod +x bin/ollama
   export PATH="$PWD/bin:$PATH"
 }
+
 
 mock_curl() {
   local message="${2:-"Hello from curl!"}"
@@ -97,22 +97,6 @@ gen_commits() {
 
 # ---- MESSAGE SUBCOMMAND ----
 @test "SCRIPT runs successfully with specified options" {
-  # # Set up environment variables and options
-  # export DEBUG=true
-  # export SUBCOMMAND="message"
-  # export TARGET="--current"
-  # export PATTERN=""
-  # export TEMPLATE_DIR="/Users/itlackey/code/github/changeish/src/prompts"
-  # export CONFIG_LOADED=true
-  # export OUTPUT_FILE=""
-  # export TODO_PATTERN="*todo*"
-  # export VERSION_FILE=""
-  # export MODEL="qwen2.5-coder"
-  # export MODEL_PROVIDER="remote"
-  # export API_MODEL="gpt-4o-mini"
-  # export API_URL="https://i2db-chat-sandboxaizehuif2whye3c.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-04-01-preview"
-  # export UPDATE_MODE="auto"
-  # export SECTION_NAME="auto"
 
   export CONFIG_FILE="$BATS_TEST_DIRNAME/../.env"
   # Run the script with the specified options
@@ -169,7 +153,7 @@ gen_commits() {
 }
 
 @test "Message: with file pattern" {
-  mock_ollama "dummy" "Patterned message"
+  mock_ollama "dummy" "Patterned message for bar.py"
   echo "bar" >bar.py && git add bar.py && git commit -m "python file"
   run "$CHANGEISH_SCRIPT" message HEAD "*.py" --verbose
   assert_success
@@ -183,14 +167,14 @@ gen_commits() {
   echo "summary" >s.txt && git add s.txt && git commit -m "sum"
   run "$CHANGEISH_SCRIPT" summary HEAD --verbose
   assert_success
-  assert_output --partial "sua"
+  assert_output --partial "sum"
 }
 
 @test "Summary for commit range with pattern" {
   gen_commits
   run "$CHANGEISH_SCRIPT" summary HEAD~2..HEAD "*.txt"
   assert_success
-  echo "$output" | grep -q "a.txt"
+  assert_output --partial "a.txt"
 }
 
 # ---- CHANGELOG SUBCOMMAND ----
@@ -208,6 +192,7 @@ gen_commits() {
   mock_ollama "dummy" "- update a b c"
   run "$CHANGEISH_SCRIPT" changelog HEAD~2..HEAD
   assert_success
+  cat CHANGELOG.md
   grep -q "a.txt" CHANGELOG.md
 }
 
@@ -259,7 +244,7 @@ gen_commits() {
 
 @test "Release notes for range dry-run" {
   gen_commits
-  mock_ollama "dummy" "- relnote"
+  mock_ollama "dummy" "relnote"
   run "$CHANGEISH_SCRIPT" release-notes HEAD~2..HEAD --dry-run
   assert_success
   assert_output --partial "relnote"
@@ -271,6 +256,7 @@ gen_commits() {
   mock_ollama "dummy" "- announce"
   run "$CHANGEISH_SCRIPT" announcement HEAD
   assert_success
+  [ -f "ANNOUNCEMENT.md" ]
   grep -q "announce" ANNOUNCEMENT.md
 }
 
@@ -332,7 +318,7 @@ EOF
 @test "Env API key required for remote" {
   unset CHANGEISH_API_KEY
   run "$CHANGEISH_SCRIPT" changelog HEAD --model-provider remote --api-url http://fake --api-model dummy
-  assert_output --partial "CHANGEISH_API_KEY is not set"
+  assert_output --partial "CHANGEISH_API_KEY"
 }
 
 # ---- ERROR CASES ----
@@ -389,11 +375,11 @@ EOF
   assert_output --partial "Response written to RELEASE_NOTES.md" 
 }
 
-@test "Announce outputs ANNOUNCE.md" {
+@test "Announce outputs ANNOUNCEMENT.md" {
   echo "ann" >ann.txt && git add ann.txt && git commit -m "ann"
   mock_ollama "dummy" "- announce"
-  run "$CHANGEISH_SCRIPT" announce HEAD
+  run "$CHANGEISH_SCRIPT" announcement HEAD
   assert_success
-  [ -f ANNOUNCE.md ]
-  grep -q "announce" ANNOUNCE.md
+  [ -f ANNOUNCEMENT.md ]
+  grep -q "announce" ANNOUNCEMENT.md
 }

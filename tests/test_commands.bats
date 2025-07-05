@@ -144,8 +144,7 @@ teardown() {
 }
 
 @test "cmd_summary HEAD~1 prints to stdout" {
- 
-  #summarize_target() { echo "SUM"; }
+
   ollama(){
     echo "SUM"
   }
@@ -159,7 +158,7 @@ teardown() {
   summarize_target() { echo "SUM"; }
   run cmd_summary
   [ "$status" -eq 0 ]
-  assert_file_exist out.sum
+  [ -f out.sum ]
   assert_output --partial "Summary written to out.sum"
   rm -f out.sum
 }
@@ -169,37 +168,19 @@ teardown() {
 #----------------------------------------
 
 @test "cmd_release_notes writes to its default file" {
-  summarize_target() { :; }
-  generate_from_summaries() {
-    printf "GEN\n"
-    printf 'Document written to %s\n' "$3"
-  }
-
   run cmd_release_notes
-  [ "$status" -eq 0 ]
-  assert_output --partial "Document written to release.out"
+  assert_success
+  assert_output --partial "Response written to RELEASE_NOTES.md"
 }
 
 @test "cmd_announcement writes to its default file" {
-  summarize_target() { :; }
-  generate_from_summaries() {
-    printf "GEN\n"
-    printf 'Document written to %s\n' "$3"
-  }
-
   run cmd_announcement
-  [ "$status" -eq 0 ]
-  assert_output --partial "Document written to ANNOUNCEMENT.md"
+  assert_success
+  assert_output --partial "Response written to ANNOUNCEMENT.md"
 }
 
 @test "cmd_changelog writes to its default file" {
-  summarize_target() { :; }
-  generate_from_summaries() {
-    printf "GEN\n"
-    printf 'Document written to %s\n' "$3"
-  }
-
   run cmd_changelog
   assert_success
-  assert_output --partial "Document written to CHANGELOG.md"
+  assert_output --partial "Response written to CHANGELOG.md"
 }

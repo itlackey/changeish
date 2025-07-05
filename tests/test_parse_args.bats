@@ -5,7 +5,7 @@ export ERROR_LOG="$BATS_TEST_DIRNAME/.logs/error.log"
 load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
 
-SCRIPT="$BATS_TEST_DIRNAME/../src/helpers.sh"
+SCRIPT="$BATS_TEST_DIRNAME/../src/changes.sh"
 
 setup() {
   # stub out external commands so parse_args doesn't actually exec them
@@ -34,34 +34,36 @@ teardown() {
 # 1. no args → prints “No arguments provided.” and exits 0
 @test "no arguments prints message and exits zero" {
   run parse_args
-  [ "$status" -eq 0 ]
-  assert_output --partial "No arguments provided."
+  echo "$output"
+  assert_failure
+  assert_output --partial "No arguments provided"
 }
 
 # 2. help flags
 @test "help flag triggers show_help and exits 0" {
   run parse_args --help
-  [ "$status" -eq 0 ]
-  assert_output "HELP"
+  assert_success
+  assert_output --partial "Usage: changeish <subcommand> [target] [pattern] [OPTIONS]"
 }
 
 @test "help via -h triggers show_help and exits 0" {
+
   run parse_args -h
-  [ "$status" -eq 0 ]
-  assert_output "HELP"
+  assert_success
+  assert_output --partial "Usage: changeish <subcommand> [target] [pattern] [OPTIONS]"
 }
 
 # 3. version flags
 @test "version flag triggers show_version and exits 0" {
   run parse_args --version
-  [ "$status" -eq 0 ]
-  assert_output "VERSION"
+  assert_success
+  assert_output --partial "$__VERSION"
 }
 
 @test "version via -v triggers show_version and exits 0" {
   run parse_args -v
-  [ "$status" -eq 0 ]
-  assert_output "VERSION"
+  assert_success
+  assert_output --partial "$__VERSION"
 }
 
 # 4. invalid first argument
@@ -96,10 +98,10 @@ teardown() {
   assert_output --partial "Subcommand: release-notes"
 }
 
-@test "subcommand 'announce' is accepted and printed" {
-  run parse_args announce --verbose
+@test "subcommand 'announcement' is accepted and printed" {
+  run parse_args announcement --verbose
   [ "$status" -eq 0 ]
-  assert_output --partial "Subcommand: announce"
+  assert_output --partial "Subcommand: announcement"
 }
 
 @test "subcommand 'available-releases' is accepted and printed" {

@@ -8,7 +8,7 @@ load 'test_helper/bats-assert/load'
 SCRIPT="$BATS_TEST_DIRNAME/../src/helpers.sh"
 setup() {
     # adjust the path as needed
-    . "$SCRIPT"
+    load "$SCRIPT"
 }
 
 @test "extracts simple single-line content" {
