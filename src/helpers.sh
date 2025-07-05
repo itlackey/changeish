@@ -1,6 +1,3 @@
-
-
-
 is_valid_git_range() {
     git rev-list "$1" >/dev/null 2>&1
 }
@@ -218,11 +215,11 @@ find_version_file() {
     fi
     if [ -n "${changes_sh}" ]; then
         echo "${changes_sh}"
-    else 
-      [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
+    else
+        [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
         echo ""
     fi
-  
+
 }
 
 # helper: extract version text from a file or git index/commit
@@ -279,7 +276,7 @@ build_diff() {
     --current | "") ;;
     *) args+=("${commit}^!") ;;
     esac
-    [ -n "$debug" ] &&  printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
+    [ -n "$debug" ] && printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
     args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
     [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
 
@@ -307,8 +304,18 @@ build_history() {
     todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-TODO}}"
     diff_pattern="${4:-}"
 
-   [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
+    [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
     : >"$hist"
+
+    if [ -z "$commit" ]; then
+        commit="--current"
+    fi
+
+    # Verify the commit is valid
+    if [ "$commit" != "--cached" ] && [ "$commit" != "--current" ] && ! git rev-parse --verify "$commit" >/dev/null 2>&1; then
+        printf 'Error: Could not build history for commit: %s\n' "$commit" >&2
+        exit 1
+    fi
 
     # header
     msg=$(get_message_header "$commit")
@@ -316,7 +323,7 @@ build_history() {
 
     # version
     vf=$(find_version_file)
-    [ -n "$vf" ] && [ -n "$debug" ] &&  printf 'Debug: Found version file: %s\n' "$vf" >&2
+    [ -n "$vf" ] && [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
     [ -n "$vf" ] && {
         ver=$(get_version_info "$commit" "$vf")
         [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"
@@ -339,6 +346,7 @@ summarize_target() {
     summaries_file="$2"
     [ -n "$debug" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
 
+
     # If no target is specified, summarize the current commit or staged changes
     if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
         summarize_commit "$target" "$summaries_file"
@@ -350,15 +358,20 @@ summarize_target() {
     else
         # Handle commit ranges
         git rev-list --reverse "$target" | while IFS= read -r commit; do
-            summarize_commit "$commit" "$summaries_file"
-            printf '\n\n' >>"$summaries_file"
+        # Verify the commit is valid
+            if ! git rev-parse --verify "$commit" >/dev/null 2>&1; then
+                printf 'Error: Invalid commit ID or range: %s\n' "$commit" >&2
+                continue               
+            fi            
+            summarize_commit "${commit}" >>"${summaries_file}"
+            printf '\n\n' >>"${summaries_file}"
+            [ -n "$debug" ] && printf 'DEBUG: Summarized commit %s\n' "$commit" >&2
         done
     fi
 }
 
 summarize_commit() {
     commit="$1"
-    out_file="$2"
     hist=$(portable_mktemp)
     pr=$(portable_mktemp)
     [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
@@ -368,7 +381,30 @@ summarize_commit() {
     printf '%s\n' "$summary_template" >"$pr"
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"
-    printf '%s\n' "$res" >>"$out_file"
+    printf '%s\n' "$res"
+}
+
+# Helper: ensure blank line before/after header, but not multiple blank lines
+ensure_blank_lines() {
+    output=$(awk '
+        function is_header(line) { return line ~ /^## / || line ~ /^# / }
+        {
+            if (is_header($0)) {
+                if (NR > 1 && prev != "") print "";
+                print $0;
+                prev = $0;
+                next;
+            }
+            if (prev != "" && is_header(prev)) print "";
+            print $0;
+            prev = $0;
+        }
+        END { if (prev != "") print "" }
+    ')
+
+    # Ensure there are no duplicate blank lines
+    output=$(printf '%s\n' "${output}" | awk 'NR==1{print} NR>1{if (!($0=="" && p=="")) print} {p=$0} END{if(p!="")print ""}')
+    printf '%s' "${output}"
 }
 
 # Remove duplicate blank lines and ensure file ends with newline
@@ -406,35 +442,36 @@ extract_changelog_section() {
 # $2 - Content to insert into the changelog section.
 # $3 - Version string to use as the section header.
 # $4 - Regex pattern to identify the section to replace.
+
 update_changelog_section() {
     ic_file="$1"
     ic_content="$2"
     ic_version="$3"
     ic_pattern="$4"
     content_file=$(mktemp)
-    printf "%s\n" "$ic_content" >"$content_file"
-    if grep -qE "$ic_pattern" "$ic_file"; then
-        awk -v pat="$ic_pattern" -v ver="$ic_version" -v content_file="$content_file" '
-      BEGIN { in_section=0; replaced=0 }
-      {
-        if ($0 ~ pat && !replaced) {
-          print "";
-          print "## " ver;
-          while ((getline line < content_file) > 0) print line;
-          close(content_file);
-          in_section=1;
-          replaced=1;
-          next
-        }
-        if (in_section && $0 ~ /^## /) in_section=0
-        if (!in_section) print $0
-      }
-      ' "$ic_file" | awk 'NR==1{print} NR>1{if (!($0=="" && p=="")) print} {p=$0} END{if(p!="")print ""}' >"$ic_file.tmp"
-        mv "$ic_file.tmp" "$ic_file"
-        rm -f "$content_file"
+    printf "%s\n" "${ic_content}" >"${content_file}"
+    if grep -qE "${ic_pattern}" "${ic_file}"; then
+        awk -v pat="${ic_pattern}" -v ver="${ic_version}" -v content_file="${content_file}" '
+            BEGIN { in_section=0; replaced=0 }
+            {
+                if ($0 ~ pat && !replaced) {
+                    print "";
+                    print "## " ver;
+                    while ((getline line < content_file) > 0) print line;
+                    close(content_file);
+                    in_section=1;
+                    replaced=1;
+                    next
+                }
+                if (in_section && $0 ~ /^## /) in_section=0
+                if (!in_section) print $0
+            }
+            ' "${ic_file}" | ensure_blank_lines >"${ic_file}.tmp"
+        mv "${ic_file}.tmp" "${ic_file}"
+        rm -f "${content_file}"
         return 0
     else
-        rm -f "$content_file"
+        rm -f "${content_file}"
         return 1
     fi
 }
@@ -503,5 +540,6 @@ update_changelog() {
     if ! tail -n 5 "$ic_file" | grep -q "Managed by changeish"; then
         printf '\n[Managed by changeish](https://github.com/itlackey/changeish)\n\n' >>"$ic_file"
     fi
+    ensure_blank_lines "$ic_file"
     remove_duplicate_blank_lines "$ic_file"
 }

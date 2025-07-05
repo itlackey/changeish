@@ -158,7 +158,7 @@ parse_args() {
         api_key=${CHANGEISH_API_KEY:-}
 
     elif [ -n "${config_file}" ]; then
-        printf 'Error: config file "%s" not found.\n' "$config_file"
+        printf 'Warning: config file "%s" not found.\n' "$config_file"
     fi
 
     # 2. Next arg: target (if present and not option)
@@ -176,13 +176,26 @@ parse_args() {
             : # skip, no target
             ;;
         *)
-            # Check for commit range (e.g., v1..v2)
+            [ -n "${debug}" ] && printf 'Debug: Parsing target: %s\n' "$1"
+            # Check if $1 is a valid commit range or commit id
             if echo "$1" | grep -q '\.\.'; then
+                if git rev-list "$1" >/dev/null 2>&1; then
+                    TARGET="$1"
+                    # If it's a valid commit ID, shift it
+                    [ -n "$debug" ] &&  printf 'Debug: Valid commit range: %s\n' "$1"
+                    shift
+                else
+                    printf 'Error: Invalid commit range: %s\n' "$1" >&2
+                    exit 1
+                fi
+            elif git rev-parse --verify "$1" >/dev/null 2>&1; then
                 TARGET="$1"
+                # If it's a valid commit ID, shift it
+                [ -n "$debug" ] &&  printf 'Debug: Valid commit ID: %s\n' "$1"
                 shift
-            elif is_valid_git_range "$1"; then
-                TARGET="$1"
-                shift
+            else
+                printf 'Error: Invalid target: %s\n' "$1" >&2
+                exit 1
             fi
             # else: do not shift, let it fall through to pattern parsing
             ;;
@@ -191,11 +204,14 @@ parse_args() {
 
     if [ -z "$TARGET" ]; then
         # If no target specified, default to current working tree
+        [ -n "$debug" ] &&  printf 'Debug: No target specified, defaulting to current working tree.\n'
         TARGET="--current"
     fi
     # 3. Collect all non-option args as pattern (until first option or end)
     PATTERN=""
     while [ $# -gt 0 ] && [ "${1#-}" = "$1" ]; do
+        # If the first argument is a pattern, collect it
+        [ -n "$debug" ] && printf 'Debug: Collecting pattern: %s\n' "$1"
         if [ -z "${PATTERN}" ]; then
             PATTERN="$1"
         else
@@ -203,6 +219,8 @@ parse_args() {
         fi
         shift
     done
+
+    [ -n "$debug" ] && printf 'Target and pattern parsed: %s, %s\n' "$TARGET" "$PATTERN"
 
     # 4. Remaining args: global options
     while [ $# -gt 0 ]; do
@@ -285,23 +303,34 @@ parse_args() {
             if [ -z "${api_key}" ]; then
                 [ -n "${debug}" ] && printf 'Warning: ollama not found, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
                 model_provider="none"
+                dry_run=true
             fi
             if [ -z "${api_url}" ]; then
                 [ -n "${debug}" ] && printf 'Warning: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
                 model_provider="none"
+                dry_run=true
             fi
+        fi
+    elif [ "${model_provider}" = "remote" ]; then
+        if [ -z "${api_key}" ]; then
+            printf 'Error: Remote mode is enabled, but no API key provided (use --api-key or CHANGEISH_API_KEY).\n' >&2
+            exit 1
+        fi
+        if [ -z "${api_url}" ]; then
+            printf 'Error: Remote mode is enabled, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
+            exit 1
         fi
     fi
 
     [ "${model_provider}" = "none" ] && printf 'Warning: Model provider set to "none", no model will be used.\n' >&2
 
-    if [ "$debug" = true ]; then
+    if [ -n "$debug" ]; then
         echo "Parsed options:"
         echo "  Debug: $debug"
         echo "  Dry Run: $dry_run"
         echo "  Subcommand: $subcmd"
         echo "  Target: $TARGET"
-        echo "  Pattern: $PATTERN"
+        echo "  Pattern: \"$PATTERN\""
         echo "  Template Directory: $template_dir"
         echo "  Config File: $config_file"
         echo "  Config Loaded: $is_config_loaded"
@@ -480,6 +509,13 @@ cmd_changelog() {
     # prompt="Write a changelog for version $version based on these summaries:"
     summaries_file=$(portable_mktemp)
     summarize_target "$TARGET" "${summaries_file}"
+
+    #if summaries_file is empty, exit early
+    if [ ! -s "${summaries_file}" ]; then
+        printf 'Error: No summaries generated for changelog.\n' >&2
+        exit 1
+    fi
+
     prompt_file_name="${PROMPT_DIR}/changelog_prompt.md"
     tmp_prompt_file=$(portable_mktemp)
     build_prompt "${prompt_file_name}" "${summaries_file}" > "${tmp_prompt_file}"
@@ -494,6 +530,11 @@ cmd_changelog() {
 if [ "${_is_sourced}" -eq 0 ]; then
     parse_args "$@"
 
+    # Verify the PWD is a valid git repository
+    if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        printf 'Error: Current directory is not a valid git repository.\n'
+        exit 1
+    fi
     # # Enable debug mode if requested
     # if [ -n "${debug}" ]; then
     #     set -x

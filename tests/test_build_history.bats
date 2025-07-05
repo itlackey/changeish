@@ -48,7 +48,6 @@ setup() {
         # By default, no TODO changes
         return 0
     }
-    debug=true
 
     # Source the script under test
     # (Make sure this path points to where build_history() lives)
@@ -177,6 +176,7 @@ teardown() {
 }
 
 @test "get_message_header with commit hash returns commit message" {
+    debug=""
     commit=$(git rev-parse HEAD)
     run get_message_header "$commit"
     assert_success
@@ -184,6 +184,7 @@ teardown() {
 }
 
 @test "find_version_file finds package.json" {
+    debug=""
     run find_version_file
     assert_success
     assert_output "package.json"

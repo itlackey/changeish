@@ -6,6 +6,7 @@ load 'test_helper/bats-support/load'
 load 'test_helper/bats-assert/load'
 
 SCRIPT="$BATS_TEST_DIRNAME/../src/helpers.sh"
+
 setup() {
     # adjust the path as needed
     load "$SCRIPT"
@@ -59,7 +60,7 @@ setup() {
     json=$(cat "$BATS_TEST_DIRNAME/assets/example_response.json")
     tmp_output=$(mktemp)
     response=$(extract_content "${json}")
-    $response > "$tmp_output")   
+    $response > "$tmp_output"  
     output=$(cat "$tmp_output")
     [ -n "$output" ]    
     assert_output --partial '### Announcement: Version 0.2.0'

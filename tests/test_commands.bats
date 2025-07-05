@@ -114,7 +114,7 @@ teardown() {
   echo "$output"
   assert_output --partial "change"
 }
-@test "cmd_message single‐commit prints message" {
+@test "cmd_message single-commit prints message" {
   run git -C "$REPO" rev-parse HEAD~1  # ensure HEAD~1 exists
   run cmd_message HEAD~1
   [ "$status" -eq 0 ]
@@ -128,6 +128,7 @@ teardown() {
 }
 
 @test "cmd_message range prints both messages" {
+
   run cmd_message HEAD~1..HEAD
   [ "$status" -eq 0 ]
   assert_output $'first commit\nsecond commit'

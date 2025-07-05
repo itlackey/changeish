@@ -121,7 +121,7 @@ teardown() {
   run parse_args message --config-file bad --verbose
 
   assert_success
-  assert_output --partial 'Error: config file "bad" not found.'
+  assert_output --partial 'Warning: config file "bad" not found.'
   assert_output --partial "Subcommand: message"
 }
 
@@ -207,4 +207,16 @@ teardown() {
   run parse_args message -- target-and-pattern --verbose
   [ "$status" -eq 1 ]
   assert_output --partial "Unknown option or argument: --"
+}
+
+
+@test "no pattern corectly sets target and pattern" {
+  debug=1
+  ollama() { echo "ollama called"; }
+  run parse_args changelog HEAD
+  [ "$status" -eq 0 ]
+  echo "$output"
+  assert_output --partial "Subcommand: changelog"
+  assert_output --partial "Target: HEAD"
+  assert_output --partial "Pattern: \"\""
 }
