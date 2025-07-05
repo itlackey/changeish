@@ -140,7 +140,9 @@ cmd_message() {
         exit 1
     elif [ "$commit_id" != "--current" ] && [ "$commit_id" != "--cached" ]; then
         # Handle commit ranges (e.g., HEAD~3..HEAD)
+
         if echo "$commit_id" | grep -q '\.\.'; then
+            [ -n "$debug" ] && printf 'Processing commit range: %s\n' "$commit_id"
             if ! git rev-list "$commit_id" >/dev/null 2>&1; then
                 printf 'Error: Invalid commit range: %s\n' "$commit_id" >&2
                 exit 1
@@ -148,6 +150,7 @@ cmd_message() {
             git log --reverse --pretty=%B "$commit_id"
             exit 0
         else
+        [ -n "$debug" ] && printf 'Processing single commit: %s\n' "$commit_id"
             if ! git rev-parse --verify "$commit_id" >/dev/null 2>&1; then
                 printf 'Error: Invalid commit ID: %s\n' "$commit_id" >&2
                 exit 1
@@ -156,18 +159,16 @@ cmd_message() {
             exit 0
         fi
     fi
-
     hist=$(portable_mktemp)
     build_history "$hist" "$commit_id" "$todo_pattern" "$PATTERN"
+    [ -n "$debug" ] && printf 'Debug: Generated history file %s\n' "$hist"
     pr=$(portable_mktemp)
     printf '%s' "$(build_prompt "${PROMPT_DIR}/commit_message_prompt.md" "$hist")" >"$pr"
     [ -n "$debug" ] && printf 'Debug: Generated prompt file %s\n' "$pr"
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"
-    if [ -n "$output_file" ]; then
-        [ -z "$dry_run" ] && printf '%s' "$res" >"$output_file"
-        printf 'Message written to %s\n' "$output_file"
-    else printf '%s\n' "$res"; fi
+   
+    printf '%s\n' "$res";
 }
 
 cmd_summary() {

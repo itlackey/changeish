@@ -493,8 +493,13 @@ find_version_file() {
     if [ -n "${changes_sh}" ]; then
         echo "${changes_sh}"
     fi
-    [ -n "${changes_sh}" ] && echo "${changes_sh}"
-    [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
+    if [ -n "${changes_sh}" ]; then
+        echo "${changes_sh}"
+    else 
+      [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
+        echo ""
+    fi
+  
 }
 
 # helper: extract version text from a file or git index/commit
@@ -551,7 +556,7 @@ build_diff() {
     --current | "") ;;
     *) args+=("${commit}^!") ;;
     esac
-    [ -n "$debug" ] && printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
+    [ -n "$debug" ] &&  printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
     args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
     [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
 
@@ -579,7 +584,7 @@ build_history() {
     todo_pattern="${3:-${CHANGEISH_TODO_PATTERN:-TODO}}"
     diff_pattern="${4:-}"
 
-    [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
+   [ -n "$debug" ] && printf 'Debug: Building history for commit %s\n' "$commit" >&2
     : >"$hist"
 
     # header
@@ -588,7 +593,7 @@ build_history() {
 
     # version
     vf=$(find_version_file)
-    [ -n "$vf" ] && [ -n "$debug" ] && printf 'Debug: Found version file: %s\n' "$vf" >&2
+    [ -n "$vf" ] && [ -n "$debug" ] &&  printf 'Debug: Found version file: %s\n' "$vf" >&2
     [ -n "$vf" ] && {
         ver=$(get_version_info "$commit" "$vf")
         [ -n "$ver" ] && printf '**Version:** %s\n' "$ver" >>"$hist"

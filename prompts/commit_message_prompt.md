@@ -29,20 +29,16 @@ Write a git commit message following the Keep a Changelog standard:
    - Focus on what changed and why
 
 4. Output Format:
-```
 [Overview under 50 chars]
 
 [feat] Add user authentication
 [fix] Resolve login timeout issues
 [docs] Update API documentation
-```
 
 Example:
-```
 Improve user authentication system
 
 [feat] Add JWT token handling
 [fix] Resolve login timeout issues
 [docs] Update API documentation
 [perf] Optimize authentication queries
-```
