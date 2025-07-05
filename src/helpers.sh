@@ -285,17 +285,6 @@ parse_args() {
                 [ -n "${debug}" ] && printf 'Warning: ollama not found, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
                 model_provider="none"
             fi
-        # elif ! ollama list >/dev/null 2>&1; then
-        #     [ -n "$debug" ] && printf 'ollama daemon not running, forcing remote mode (local model unavailable).\n'
-        #     model_provider="remote"
-        #     if [ -z "$api_key" ]; then
-        #         [ -n "${debug}" ] && printf 'Warning: ollama daemon not running, so remote mode is required, but CHANGEISH_API_KEY is not set.\n' >&2
-        #         model_provider="none"
-        #     fi
-        #     if [ -z "$api_url" ]; then
-        #         [ -n "${debug}" ] && printf 'Warning: ollama daemon not running, so remote mode is required, but no API URL provided (use --api-url or CHANGEISH_API_URL).\n' >&2
-        #         model_provider="none"
-        #     fi
         fi
     fi
 
@@ -332,30 +321,6 @@ parse_version() {
         out=$(echo "$1" | sed -n -E 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
     fi
     printf '%s' "$out"
-}
-
-get_current_version_from_file() {
-    file="$1"
-    if [ ! -f "$file" ]; then
-        echo ""
-        return 0
-    fi
-    version_lines="$(grep -Ei -m1 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$file")"
-    version=$(parse_version "$version_lines")
-    if [ -n "$version" ]; then
-        echo "$version"
-        return 0
-    fi
-    echo ""
-}
-
-# Get current version from version_file or fallback
-get_current_version() {
-    if [ -n "$version_file" ] && [ -f "$version_file" ]; then
-        grep -Eom1 '[0-9]+\.[0-9]+\.[0-9]+' "$version_file" || echo "Unreleased"
-    else
-        echo "Unreleased"
-    fi
 }
 
 json_escape() {
@@ -537,22 +502,36 @@ get_version_info() {
     commit="$1"
     vf="$2"
     [ -n "$debug" ] && printf 'Debug: Getting version info for commit %s from file %s\n' "$commit" "$vf" >&2
+
+    # Ensure empty string is returned on failure
     case "$commit" in
     --current | "")
-        [ -f "$vf" ] && grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+        if [ -f "$vf" ]; then
+            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1 || echo ""
+        else
+            echo ""
+        fi
         ;;
     --cached)
         if git ls-files --cached --error-unmatch "$vf" >/dev/null 2>&1; then
-            git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
+            git show ":$vf" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 || echo ""
         elif [ -f "$vf" ]; then
-            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1 || echo ""
+        else
+            echo ""
         fi
         ;;
     *)
-        if git ls-tree -r --name-only "$commit" | grep -Fxq "$vf"; then
-            git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1
-        elif [ -f "$vf" ]; then
-            grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1
+        if git rev-parse --verify "$commit" >/dev/null 2>&1; then
+            if git ls-tree -r --name-only "$commit" | grep -Fxq "$vf"; then
+                git show "${commit}:${vf}" | grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' | head -n1 || echo ""
+            elif [ -f "$vf" ]; then
+                grep -Ei 'version[^0-9]*[0-9]+\.[0-9]+(\.[0-9]+)?' "$vf" | head -n1 || echo ""
+            else
+                echo ""
+            fi
+        else
+            echo "" # Return empty string for invalid commit IDs
         fi
         ;;
     esac | {
