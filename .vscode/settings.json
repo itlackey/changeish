@@ -17,5 +17,8 @@
         "[x]",
         "ENHANCEMENT",
         "CHORE"
+    ],
+    "shellcheck.customArgs": [
+        "-x"
     ]
 }
