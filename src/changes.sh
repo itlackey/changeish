@@ -378,7 +378,7 @@ Subcommands:
   summary              Generate summary
   changelog            Generate or update changelog (--update-mode)
   release-notes        Generate or update release notes (--update-mode)
-  announce             Draft announcement
+  announcement             Draft announcement
   available-releases   List available script releases
   update               Update this script to latest version
 
@@ -467,6 +467,7 @@ cmd_release_notes() {
 cmd_announcement() {
     summaries_file=$(portable_mktemp)
     summarize_target "${TARGET}" "${summaries_file}"
+    cat "${summaries_file}"
     prompt_file_name="${PROMPT_DIR}/announcement_prompt.md"
     tmp_prompt_file=$(portable_mktemp)
     build_prompt "${prompt_file_name}" "${summaries_file}" > "${tmp_prompt_file}"
