@@ -363,15 +363,18 @@ summarize_target() {
 
     # If no target is specified, summarize the current commit or staged changes
     if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
-        summarize_commit "$target" "$summaries_file"
+         [ -n "$debug" ] && printf 'Processing target: %s\n' "$target" >&2
+        summarize_commit "$target" >>"$summaries_file"
         printf '\n\n' >>"$summaries_file"
     # Single commit
-    elif git rev-parse --verify "$target" >/dev/null 2>&1 && [ "$(git rev-list --count "$target")" = "1" ]; then
-        summarize_commit "$target" "$summaries_file"
+    elif ! echo "$target" | grep -q "\.\." && git rev-parse --verify "$target" >/dev/null 2>&1; then
+        [ -n "$debug" ] &&  printf 'Summarizing commit: %s\n' "$target" >&2
+        summarize_commit "$target" >>"$summaries_file"
         printf '\n\n' >>"$summaries_file"
     else
         # Handle commit ranges
         git rev-list --reverse "$target" | while IFS= read -r commit; do
+           [ -n "$debug" ] &&  printf 'Processing commit: %s\n' "$commit" >&2
             # Verify the commit is valid
             if ! git rev-parse --verify "$commit" >/dev/null 2>&1; then
                 printf 'Error: Invalid commit ID or range: %s\n' "$commit" >&2
@@ -379,7 +382,7 @@ summarize_target() {
             fi
             summarize_commit "${commit}" >>"${summaries_file}"
             printf '\n\n' >>"${summaries_file}"
-            [ -n "$debug" ] && printf 'DEBUG: Summarized commit %s\n' "$commit" >&2
+            [ -n "$debug" ] && printf 'DEBUG: Processed commit %s\n' "$commit" >&2
         done
     fi
 }
