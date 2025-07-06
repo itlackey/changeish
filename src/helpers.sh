@@ -212,9 +212,6 @@ find_version_file() {
     # Fallback: handle the case where "changes.sh" is in the root directory
     if [ -n "${changes_sh}" ]; then
         echo "${changes_sh}"
-    fi
-    if [ -n "${changes_sh}" ]; then
-        echo "${changes_sh}"
     else
         [ -n "${debug}" ] && printf 'Debug: No version file found, returning empty string.\n' >&2
         echo ""
@@ -279,7 +276,7 @@ build_diff() {
     *) diff_cmd="$diff_cmd ${commit}^!" ;;
     esac
     [ -n "$debug" ] && printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
-    diff_cmd="$diff_cmd --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
+    diff_cmd="$diff_cmd --minimal --no-prefix --unified=3 --no-color -b -w --compact-summary --color-moved=no"
     if [ -n "$diff_pattern" ]; then
         diff_cmd="$diff_cmd -- \"$diff_pattern\""
     fi
@@ -394,7 +391,7 @@ summarize_commit() {
     [ -n "$debug" ] && printf "DEBUG: summarize_commit commit='%s', hist='%s', prompt file='%s'\n" "$commit" "$hist" "$pr" >&2
     build_history "$hist" "$commit" "$todo_pattern" "$PATTERN"
     summary_template=$(build_prompt "${PROMPT_DIR}/summary_prompt.md" "$hist")
-    #[ -n "$debug" ] && printf 'Debug: Using summary prompt: %s\n' "$summary_template"
+    [ -n "$debug" ] && printf 'DEBUG: Using summary prompt: %s\n' "$summary_template"
     printf '%s\n' "$summary_template" >"$pr"
     res=$(generate_response "$pr")
     rm -f "$hist" "$pr"

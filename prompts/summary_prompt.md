@@ -1,56 +1,57 @@
-Generate a detailed narrative summary of the code changes:
+Write a structured, Keep a Changelog–style summary of the provided git diff. Do not include any version headings or other releases—just one section of grouped changes with type prefixes for each list item.
 
-1. Content Requirements:
-   - Write a clear, natural language summary
-   - Include all major changes and their types
-   - Focus on explaining what changed and why
-   - Group related changes logically
-   - Maintain a professional but readable tone
+1. Overview  
+   - Begin with a section summarizing all of the changes, and the purpose and scope of these changes.
 
-2. Structure Guidelines:
-   - Start with a brief overview paragraph
-   - Organize changes by type (features, fixes, improvements)
-   - Include specific details about each change
-   - Mention affected files and components
-   - Explain the impact of changes
+2. Change Groups  
+   For each group below (omit any with no entries), include the heading and list bullet points. Each bullet point should prefixed with the type tag:
 
-3. Information to Include:
-   - Types of changes (feat, fix, docs, style, etc.)
-   - Specific files and components modified
-   - Purpose and reasoning behind changes
-   - Any notable improvements or optimizations
-   - Dependencies or requirements affected
+   ### Added  
+   - Describe each new feature: what changed, why it was added, and its impact.  
+   - Mention affected files or components when relevant.
 
-4. Style Requirements:
-   - Use natural language, not commit message format
-   - Avoid technical jargon where possible
-   - Use bullet points for clarity
-   - Include specific examples when helpful
-   - Maintain consistent formatting
+   ### Fixed  
+   - Describe each bug fix: what was broken, how it’s now resolved, and any side-effects.  
+   - Reference files or tests updated.
 
-5. Example Format:
-```
-The recent changes focus on improving the user authentication system. Here's a detailed breakdown:
+   ### Documentation  
+   - Summarize documentation updates: what was clarified or added, and why.
 
-Features Added:
-- JWT token handling implementation for secure authentication
-- New login and logout API endpoints
-- Enhanced user model with additional security fields
+   ### Style  
+   - List formatting or lint changes; note any tooling/formatter updates.
 
-Bug Fixes:
-- Resolved login timeout issues by implementing connection pooling
-- Fixed token expiration handling
-- Improved error messaging for authentication failures
+   ### Refactored  
+   - Explain code restructuring: what modules or components were reorganized and benefit gained.
 
-Improvements:
-- Optimized authentication queries for better performance
-- Updated API documentation with authentication examples
-- Added comprehensive test coverage for authentication flows
-```
+   ### Performance  
+   - Detail optimizations: what was improved and performance gains measured.
 
-6. Processing Instructions:
-- Analyze the provided git diff output
-- Identify the main purpose and scope of changes
-- Group related changes by type and functionality
-- Extract specific details about each modification
-- Focus on providing context and understanding
+   ### Tests  
+   - Outline new or updated tests: what scenarios now covered or fixed.
+
+   ### Build  
+   - Note changes to build scripts, dependencies, or CI configurations.
+
+   ### CI/CD  
+   - Summarize pipeline/job changes or additions.
+
+   ### Chores  
+   - Miscellaneous maintenance tasks not covered above.
+
+   ### Security  
+   - Describe any security patches or vulnerability fixes.
+
+3. Formatting & Tone  
+   - Use bullet points (`- `) under each heading.  
+   - Keep each bullet under 120 characters.  
+   - Write in natural, professional language—avoid raw diff syntax.  
+   - Group related items together and maintain logical order.
+   - Each list item should provide enough detail to understand the change.
+
+4. Processing Instructions  
+   - Parse the git diff to detect each change’s type.  
+   - Assign changes to the appropriate group above.  
+   - Extract file paths or components when pertinent.  
+   - If possible, explain "what" changed, "why," and the "impact."  
+
+Output only the completed summary—no additional commentary.
