@@ -270,29 +270,47 @@ build_diff() {
     commit="$1"
     diff_pattern="$2"
     debug="$3"
-    args=(--no-pager diff)
+
+    # Build git diff command as a string (POSIX-compatible, no arrays)
+    diff_cmd="git --no-pager diff"
     case "$commit" in
-    --cached) args+=(--cached) ;;
+    --cached) diff_cmd="$diff_cmd --cached" ;;
     --current | "") ;;
-    *) args+=("${commit}^!") ;;
+    *) diff_cmd="$diff_cmd ${commit}^!" ;;
     esac
     [ -n "$debug" ] && printf 'Debug: Building diff for commit %s with pattern %s\n' "$commit" "$diff_pattern" >&2
-    args+=(--minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no)
-    [ -n "$diff_pattern" ] && args+=(-- "$diff_pattern")
+    diff_cmd="$diff_cmd --minimal --no-prefix --unified=0 --no-color -b -w --compact-summary --color-moved=no"
+    if [ -n "$diff_pattern" ]; then
+        diff_cmd="$diff_cmd -- \"$diff_pattern\""
+    fi
 
-    [ "$debug" = true ] && printf 'Debug: git %s\n' "${args[*]}" >&2
-    diff_output="$(git "${args[@]}")"
+    [ "$debug" = true ] && printf 'Debug: %s\n' "$diff_cmd" >&2
+    # shellcheck disable=SC2086
+    diff_output=$(eval "$diff_cmd")
 
     # handle untracked files
     untracked=$(git ls-files --others --exclude-standard)
-    IFS=$'\n'
+    OLD_IFS=$IFS
+    IFS='
+'
     for f in $untracked; do
         [ ! -f "$f" ] && continue
-        [ -n "$diff_pattern" ] && case "$f" in $diff_pattern) ;; *) continue ;; esac
+        if [ -n "$diff_pattern" ]; then
+            # Only match if the pattern matches the filename (basic glob)
+            case "$f" in
+            $diff_pattern) ;;
+            *) continue ;;
+            esac
+        fi
         extra=$(git --no-pager diff --no-prefix --unified=0 --no-color -b -w --minimal --compact-summary --color-moved=no --no-index /dev/null "$f" 2>/dev/null || true)
-        diff_output="${diff_output}${diff_output:+\n}${extra}"
+        if [ -n "$diff_output" ] && [ -n "$extra" ]; then
+            diff_output="${diff_output}
+            ${extra}"
+        elif [ -n "$extra" ]; then
+            diff_output="$extra"
+        fi
     done
-    IFS=' '
+    IFS=$OLD_IFS
 
     printf '%s\n' "$diff_output"
 }
@@ -346,7 +364,6 @@ summarize_target() {
     summaries_file="$2"
     [ -n "$debug" ] && echo "DEBUG: summaries_file='$summaries_file', target='$target'"
 
-
     # If no target is specified, summarize the current commit or staged changes
     if [ "$target" = "--current" ] || [ "$target" = "--cached" ] || [ -z "$target" ]; then
         summarize_commit "$target" "$summaries_file"
@@ -358,11 +375,11 @@ summarize_target() {
     else
         # Handle commit ranges
         git rev-list --reverse "$target" | while IFS= read -r commit; do
-        # Verify the commit is valid
+            # Verify the commit is valid
             if ! git rev-parse --verify "$commit" >/dev/null 2>&1; then
                 printf 'Error: Invalid commit ID or range: %s\n' "$commit" >&2
-                continue               
-            fi            
+                continue
+            fi
             summarize_commit "${commit}" >>"${summaries_file}"
             printf '\n\n' >>"${summaries_file}"
             [ -n "$debug" ] && printf 'DEBUG: Summarized commit %s\n' "$commit" >&2

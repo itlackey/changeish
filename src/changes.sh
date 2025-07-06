@@ -4,7 +4,8 @@
 __VERSION="0.2.0"
 
 set -eu
-IFS='\n'
+IFS='
+'
 
 
 # -------------------------------------------------------------------
@@ -25,15 +26,14 @@ get_script_dir() {
 # Detect if sourced (works in bash, zsh, dash, sh)
 _is_sourced=0
 # shellcheck disable=SC2292
-if [ "${BASH_SOURCE[0]:-}" != "" ] && [ "${BASH_SOURCE[0]:-}" != "$0" ]; then
+if [ "${BASH_SOURCE:-}" != "" ] && [ "${BASH_SOURCE:-}" != "$0" ]; then
     _is_sourced=1
-elif [ -n "${ZSH_EVAL_CONTEXT:-}" ] && [[ "$ZSH_EVAL_CONTEXT" == *:file ]]; then
+elif [ -n "${ZSH_EVAL_CONTEXT:-}" ] && [ "${ZSH_EVAL_CONTEXT#*:}" = "file" ]; then
     _is_sourced=1
 fi
-
 # Use BASH_SOURCE if available, else $0
-if [ -n "${BASH_SOURCE[0]:-}" ]; then
-    _SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [ -n "${BASH_SOURCE:-}" ]; then
+    _SCRIPT_PATH="${BASH_SOURCE}"
 else
     _SCRIPT_PATH="$0"
 fi
@@ -41,7 +41,7 @@ fi
 SCRIPT_DIR="$(get_script_dir "$_SCRIPT_PATH")"
 PROMPT_DIR="${SCRIPT_DIR}/../prompts"
 
-# shellcheck source=./src/helpers.sh
+# shellcheck source=helpers.sh
 . "${SCRIPT_DIR}/helpers.sh"
 
 
