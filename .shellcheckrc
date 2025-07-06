@@ -3,6 +3,7 @@ shell=sh
 
 # Only report errors (ignore warnings/style)
 severity=warnings
+external-sources=true
 
 # # Disable notices about things that are intentionally non-POSIX or acceptable
 # disable = \
